@@ -1,19 +1,17 @@
-from typing import Tuple
+import numpy as np
 import numpy.typing as npt
-
 import torch
 import torch.nn.functional as F
-from torch.utils.data import Dataset, DataLoader
-import numpy as np
-from PIL import Image
 from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
+from PIL import Image
+from torch.utils.data import DataLoader, Dataset
 
-from config import scale_factor_f, patch_width, patch_height, img_scaled_width, img_scaled_height
+from config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
 from scale import scale_x, scale_y
 
 
-def downsample_by_averaging(img: npt.NDArray[np.float32], scale: Tuple[int, int]) -> npt.NDArray[np.float32]:
+def downsample_by_averaging(img: npt.NDArray[np.float32], scale: tuple[int, int]) -> npt.NDArray[np.float32]:
     """Downsample image by averaging blocks."""
     h, w, c = img.shape
     new_h, new_w = h // scale[0], w // scale[1]
@@ -22,24 +20,24 @@ def downsample_by_averaging(img: npt.NDArray[np.float32], scale: Tuple[int, int]
 
 def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[torch.Tensor, torch.Tensor]:
     """Load and process an image with its label."""
-    image = Image.open(path).convert('RGB')
+    image = Image.open(path).convert("RGB")
     image = np.array(image).astype(np.float32) / 255.0
-    
+
     image = torch.from_numpy(image).permute(2, 0, 1)  # HWC to CHW
-    image = F.interpolate(image.unsqueeze(0), size=(img_scaled_height, img_scaled_width), mode='area').squeeze(0)
+    image = F.interpolate(image.unsqueeze(0), size=(img_scaled_height, img_scaled_width), mode="area").squeeze(0)
     image = image.permute(1, 2, 0)  # CHW back to HWC for processing
-    
+
     label = torch.tensor(label, dtype=torch.float32)
-    
-    center_x = ((label[2] + label[0]) / 2.) / scale_factor_f
-    center_y = ((label[3] + label[1]) / 2.) / scale_factor_f
-    
+
+    center_x = ((label[2] + label[0]) / 2.0) / scale_factor_f
+    center_y = ((label[3] + label[1]) / 2.0) / scale_factor_f
+
     dx = label[2] - label[0]
     dy = label[3] - label[1]
     d = torch.sqrt(dx * dx + dy * dy) / scale_factor_f
-    
+
     label = torch.tensor([center_x, center_y, d])
-    
+
     return image, label
 
 
@@ -57,8 +55,8 @@ def crop_image_by_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch
     patches_x = img_scaled_width // patch_width
     patches_y = img_scaled_height // patch_height
 
-    patch_x = torch.clamp(cx // patch_width, 0, patches_x-1)
-    patch_y = torch.clamp(cy // patch_height, 0, patches_y-1)
+    patch_x = torch.clamp(cx // patch_width, 0, patches_x - 1)
+    patch_y = torch.clamp(cy // patch_height, 0, patches_y - 1)
 
     start_x = int(patch_x * patch_width)
     start_y = int(patch_y * patch_height)
@@ -71,12 +69,8 @@ def crop_image_by_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch
     return image2, label
 
 
-def crop_image_random_with_ball(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Randomly crop image patch ensuring ball remains visible."""
-    cx = label[0]
-    cy = label[1]
-    d = label[2]
-
+def _calculate_random_crop_bounds(cx: float, cy: float, d: float) -> tuple[int, int]:
+    """Calculate random crop position bounds to keep ball visible."""
     offset = d * 0.05
 
     left = max(int(cx + offset - patch_width), 0)
@@ -86,15 +80,17 @@ def crop_image_random_with_ball(image: torch.Tensor, label: torch.Tensor) -> tup
 
     if left > right:
         left, right = right, left
-
     if top > bottom:
         top, bottom = bottom, top
 
     x = left if left == right else torch.randint(left, right + 1, (1,)).item()
     y = top if top == bottom else torch.randint(top, bottom + 1, (1,)).item()
 
-    start_x = x
-    start_y = y
+    return x, y
+
+
+def _adjust_crop_bounds(start_x: int, start_y: int) -> tuple[int, int, int, int]:
+    """Adjust crop bounds to fit within image dimensions."""
     end_x = start_x + patch_width
     end_y = start_y + patch_height
 
@@ -106,10 +102,20 @@ def crop_image_random_with_ball(image: torch.Tensor, label: torch.Tensor) -> tup
         end_y = img_scaled_height
         start_y = end_y - patch_height
 
-    image2 = image[start_y:end_y, start_x:end_x, :]
-    label = torch.tensor([cx - float(start_x), cy - float(start_y), d])
+    return start_x, start_y, end_x, end_y
 
-    return image2, label
+
+def crop_image_random_with_ball(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Randomly crop image patch ensuring ball remains visible."""
+    cx, cy, d = label[0], label[1], label[2]
+
+    start_x, start_y = _calculate_random_crop_bounds(cx, cy, d)
+    start_x, start_y, end_x, end_y = _adjust_crop_bounds(start_x, start_y)
+
+    cropped_image = image[start_y:end_y, start_x:end_x, :]
+    adjusted_label = torch.tensor([cx - float(start_x), cy - float(start_y), d])
+
+    return cropped_image, adjusted_label
 
 
 def patchify_image(image: torch.Tensor, label: torch.Tensor) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
@@ -131,7 +137,7 @@ def patchify_image(image: torch.Tensor, label: torch.Tensor) -> tuple[list[torch
             xs = x * patch_width
             xe = xs + patch_width
 
-            patches.append(image[ys:ye,xs:xe,:])
+            patches.append(image[ys:ye, xs:xe, :])
             labels.append(torch.tensor([cx - float(xs), cy - float(ys), d]))
 
     return patches, labels
@@ -140,24 +146,24 @@ def patchify_image(image: torch.Tensor, label: torch.Tensor) -> tuple[list[torch
 def train_augment_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply training augmentations to image and label."""
     r = torch.rand(1).item()
-    
+
     if r < 0.5:
         # Horizontal flip
         image = torch.flip(image, dims=[1])
         label = torch.tensor([patch_width - label[0], label[1], label[2]])
-    
+
     # Random brightness adjustment
     brightness_factor = 1.0 + (torch.rand(1).item() - 0.5) * 0.3  # ±0.15 range
     image = torch.clamp(image * brightness_factor, 0, 1)
-    
-    a = rgb2yuv(image * 255.)
-    
+
+    a = rgb2yuv(image * 255.0)
+
     return a, label
 
 
 def test_augment_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply test augmentations (RGB to YUV conversion only)."""
-    return rgb2yuv(image*255.), label
+    return rgb2yuv(image * 255.0), label
 
 
 def final_adjustments(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
@@ -165,118 +171,108 @@ def final_adjustments(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.T
     x = scale_x(label[0] - patch_width / 2)
     y = scale_y(label[1] - patch_height / 2)
 
-    return image / 255., torch.tensor([x, y, label[2]])
+    return image / 255.0, torch.tensor([x, y, label[2]])
 
 
 def final_adjustments_patches(image: torch.Tensor, label: list[torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply final scaling adjustments for patch-based processing."""
     label = torch.stack(label)  # Convert list to tensor
-    x = scale_x(label[:,0] - patch_width / 2)
-    y = scale_y(label[:,1] - patch_height / 2)
+    x = scale_x(label[:, 0] - patch_width / 2)
+    y = scale_y(label[:, 1] - patch_height / 2)
 
-    return image / 255., torch.stack([x, y, label[:,2]], dim=1)
+    return image / 255.0, torch.stack([x, y, label[:, 2]], dim=1)
 
 
 class BallDataset(Dataset):
     """PyTorch dataset for ball detection."""
-    
+
     def __init__(self, images: list[str], labels: list[tuple[int, int, int, int]], trainset: bool = True) -> None:
         self.images = images
         self.labels = labels
         self.trainset = trainset
-        
+
     def __len__(self) -> int:
         return len(self.images)
-    
+
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         image_path = self.images[idx]
         label = self.labels[idx]
-        
+
         image, label = load_image(image_path, label)
-        
+
         if self.trainset:
             image, label = crop_image_random_with_ball(image, label)
             image, label = train_augment_image(image, label)
         else:
             image, label = crop_image_by_image(image, label)
             image, label = test_augment_image(image, label)
-            
+
         image, label = final_adjustments(image, label)
-        
+
         # Convert to CHW format for PyTorch
         image = image.permute(2, 0, 1)
-        
+
         return image, label
 
 
-def create_dataset(images: list[str], labels: list[tuple[int, int, int, int]], batch_size: int, trainset: bool = True) -> DataLoader:
+def create_dataset(
+    images: list[str], labels: list[tuple[int, int, int, int]], batch_size: int, trainset: bool = True
+) -> DataLoader:
     """Create PyTorch DataLoader for the dataset."""
     dataset = BallDataset(images, labels, trainset)
     return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=trainset,
-        num_workers=4 if trainset else 2,
-        pin_memory=True
+        dataset, batch_size=batch_size, shuffle=trainset, num_workers=4 if trainset else 2, pin_memory=True
     )
 
 
 class BallPatchDataset(Dataset):
     """PyTorch dataset for patch-based ball detection."""
-    
+
     def __init__(self, images: list[str], labels: list[tuple[int, int, int, int]]) -> None:
         self.images = images
         self.labels = labels
-        
+
     def __len__(self) -> int:
         return len(self.images)
-    
+
     def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
         image_path = self.images[idx]
         label = self.labels[idx]
-        
+
         image, label = load_image(image_path, label)
         patches, patch_labels = patchify_image(image, label)
-        
+
         # Apply augmentations to all patches
         augmented_patches = []
         augmented_labels = []
-        
+
         for patch, patch_label in zip(patches, patch_labels):
             patch, patch_label = test_augment_image(patch, patch_label)
             augmented_patches.append(patch)
             augmented_labels.append(patch_label)
-        
+
         # Stack patches and apply final adjustments
         stacked_patches = torch.stack(augmented_patches)
         _, final_labels = final_adjustments_patches(stacked_patches[0], augmented_labels)
-        
+
         # Convert patches to CHW format
         stacked_patches = stacked_patches.permute(0, 3, 1, 2)  # NHWC to NCHW
-        
+
         return stacked_patches, final_labels
 
 
-def create_dataset_image_based(images: list[str], labels: list[tuple[int, int, int, int]], batch_size: int) -> DataLoader:
+def create_dataset_image_based(
+    images: list[str], labels: list[tuple[int, int, int, int]], batch_size: int
+) -> DataLoader:
     """Create PyTorch DataLoader for patch-based dataset."""
     dataset = BallPatchDataset(images, labels)
-    return DataLoader(
-        dataset,
-        batch_size=batch_size,
-        shuffle=False,
-        num_workers=2,
-        pin_memory=True
-    )
+    return DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
 
 
 def rgb2yuv(rgb: torch.Tensor) -> torch.Tensor:
     """Convert RGB to YUV color space."""
-    m = torch.tensor([
-        [0.299, -0.169,  0.498],
-        [0.587, -0.331, -0.419],
-        [0.114,  0.499, -0.0813]
-    ], dtype=torch.float32)
-    
+    m = torch.tensor([[0.299, -0.169, 0.498], [0.587, -0.331, -0.419], [0.114, 0.499, -0.0813]], dtype=torch.float32)
+
     # Reshape for matrix multiplication: (H, W, 3) -> (H*W, 3)
     original_shape = rgb.shape
     rgb_flat = rgb.view(-1, 3)
@@ -289,11 +285,15 @@ def rgb2yuv(rgb: torch.Tensor) -> torch.Tensor:
 
 def yuv2rgb(yuv: torch.Tensor) -> torch.Tensor:
     """Convert YUV to RGB color space."""
-    m = torch.tensor([
-        [1.0, 1.0, 1.0],
-        [-0.000007154783816076815, -0.3441331386566162, 1.7720025777816772],
-        [1.4019975662231445, -0.7141380310058594, 0.00001542569043522235]], dtype=torch.float32)
-    
+    m = torch.tensor(
+        [
+            [1.0, 1.0, 1.0],
+            [-0.000007154783816076815, -0.3441331386566162, 1.7720025777816772],
+            [1.4019975662231445, -0.7141380310058594, 0.00001542569043522235],
+        ],
+        dtype=torch.float32,
+    )
+
     # Reshape for matrix multiplication
     original_shape = yuv.shape
     yuv_flat = yuv.view(-1, 3)
@@ -311,15 +311,17 @@ def show_dataset(ds: DataLoader) -> None:
     plt.figure(figsize=(30, 30))
     for i in range(min(9, len(image_batch))):
         plt.subplot(3, 3, i + 1)
-        
+
         # Convert CHW to HWC for display
         image = image_batch[i].permute(1, 2, 0).numpy()
         plt.imshow(image)
-        
+
         label = label_batch[i]
-        plt.gca().add_patch(Ellipse((label[0], label[1]), label[2], label[2], 
-                                   linewidth=1, edgecolor='r', facecolor='none'))
+        plt.gca().add_patch(
+            Ellipse((label[0], label[1]), label[2], label[2], linewidth=1, edgecolor="r", facecolor="none")
+        )
         plt.axis("off")
-    
+
     plt.waitforbuttonpress()
+    plt.close()
     plt.close()

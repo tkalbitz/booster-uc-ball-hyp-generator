@@ -23,13 +23,6 @@ batch_size: int = 200
 steps: int = len(test_img) // batch_size
 ds = create_dataset(test_img, test_labels, batch_size, trainset=False)
 
-# RGB 3804 model_file = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/2021-05-17-17-57-51/weights.loss.152-1.657603.h5"
-# RGB 3806 model_file = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/2021-05-17-17-57-51/weights.acc.149-0.958740.h5"
-# YUV 3824 model_file = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-17-21-08-39/weights.loss.192-1.614760.h5"
-# YUV 3819 model_file = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-17-21-08-39/weights.loss.228-1.578639.h5"
-# YUV 3821 model_file = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-17-21-08-39/weights.acc.227-0.959717.h5"
-# YUV 3801 model_file = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-17-20-52-43/weights.loss.125-1.722393.h5"
-# YUV 3830 model_file = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-17-20-31-42/weights.acc.208-0.957764.h5"
 model_file = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-21-17-24-53/weights.acc.268-0.964466.h5"
 
 model = models.create_network_v2(patch_height, patch_width)
@@ -54,6 +47,5 @@ for s in range(steps):
     cur_sum = torch.sum(r.int())
     ball_sum += cur_sum
 
-    #print(f"{cur_sum} / {batch_size}")
 
 print(f"Found in total {ball_sum} / {steps * batch_size}")

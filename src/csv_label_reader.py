@@ -1,6 +1,10 @@
 import re
 from pathlib import Path
 
+from logger import get_logger
+
+_logger = get_logger(__name__)
+
 
 def read_csv_label(csv_file: Path, img_files: dict[str, str]) -> tuple[tuple[list[str], list[tuple[int, int, int, int]], list[str]], int]:
     regex = re.compile(r"(.+_U\.png);\d+;[^;]+;Ball;(\d+);(\d+);(\d+);(\d+);Ball")
@@ -36,13 +40,12 @@ def read_csv_label(csv_file: Path, img_files: dict[str, str]) -> tuple[tuple[lis
             y1, y2 = y2, y1
 
         if img_file not in img_files:
-            print(f"Skip missing image file {img_file}")
+            _logger.warning("Skip missing image file %s", img_file)
             continue
 
         if img_file in found_files:
             skipped_balls += 1
             result.pop(img_file, None)
-            # print(f"Skip file with more than one ball {img_file}")
             continue
 
         found_files.add(img_file)
@@ -78,14 +81,6 @@ def load_csv_collection(file: Path, img_files: dict[str, str]) -> tuple[list[str
         res_lines += lines
         skipped += ignored
 
-    # print([(item, count) for item, count in collections.Counter(res_imgs).items() if count > 1])
-    #os.makedirs('/home/tkalbitz/temp/u_ball_bench/')
-    #for f in res_imgs:
-    #    shutil.copy2(f, "/home/tkalbitz/temp/u_ball_bench/")
-    #with open("/home/tkalbitz/temp/u_ball_bench/labels.csv", "w") as f:
-    #    for l in res_lines:
-    #        f.write(l)
-    #print("XXXXXXXXXXXXXXXXXXXXXXXX")
 
     return res_imgs, res_labels, skipped
 
@@ -103,5 +98,5 @@ if __name__ == '__main__':
         cnt_balls += len(img_path)
         to_small += file_to_small
 
-    print(f"To small balls: {to_small}")
-    print(f"Found valid balls {cnt_balls}")
+    _logger.info("Too small balls: %d", to_small)
+    _logger.info("Found valid balls: %d", cnt_balls)

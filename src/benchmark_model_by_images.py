@@ -48,6 +48,5 @@ for s in range(steps):
     found = torch.sum(r.int()) > 0
     ball_sum += found.int()
 
-    #print(f"{cur_sum} / {batch_size}")
 
 print(f"Found in total {ball_sum} / {steps * batch_size}")
