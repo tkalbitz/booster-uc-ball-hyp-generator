@@ -1,5 +1,9 @@
 import torch
 
+import models
+from config import patch_height, patch_width, image_dir, testset_csv_collection
+from csv_label_reader import load_csv_collection
+from dataset_handling import create_dataset
 from scale import unscale_x, unscale_y
 
 if __name__ != '__main__':
@@ -8,11 +12,6 @@ if __name__ != '__main__':
 # Set device
 device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
-
-import models
-from config import patch_height, patch_width, image_dir, testset_csv_collection
-from csv_label_reader import load_csv_collection
-from dataset_handling import create_dataset
 
 png_files: dict[str, str] = {f.name: str(f) for f in image_dir.glob("**/*.png")}
 

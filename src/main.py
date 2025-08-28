@@ -9,18 +9,17 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
+import models
+from config import patch_width, patch_height, image_dir, testset_csv_collection, trainingset_csv_collection
+from csv_label_reader import load_csv_collection
 from custom_metrics import FoundBallMetric
+from dataset_handling import create_dataset
 from scale import unscale_x, unscale_y
 from utils import get_flops
 
 # Set device
 device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
-
-import models
-from csv_label_reader import load_csv_collection
-from dataset_handling import create_dataset
-from config import patch_width, patch_height, image_dir, testset_csv_collection, trainingset_csv_collection
 
 batch_size_train: int = 64
 batch_size_test: int = 128

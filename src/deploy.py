@@ -4,15 +4,15 @@ import sys
 import torch
 import torch.onnx
 
+import models
+from config import patch_height, patch_width, image_dir, testset_csv_collection
+from csv_label_reader import load_csv_collection
+from dataset_handling import create_dataset
 from scale import unscale_x, unscale_y
 
 # Force CPU for deployment
 device: torch.device = torch.device('cpu')
 print(f"Using device: {device}")
-
-from config import patch_height, patch_width, image_dir, testset_csv_collection
-from csv_label_reader import load_csv_collection
-from dataset_handling import create_dataset
 
 
 deploy_dir: str = '/home/tkalbitz/naoTeamRepo/firmware_5.0/deploy/data/tflite/'
@@ -25,15 +25,13 @@ if len(sys.argv) == 2:
 print(f"Weight file: {weight_file}")
 
 
-def create_dataset():
+def create_representative_dataset():
     png_files = {f.name: str(f) for f in image_dir.glob("**/*.png")}
 
     test_img, test_labels, skipped_testset = load_csv_collection(testset_csv_collection, png_files)
 
     print(f"Testset contains {len(test_img)} and we removed {skipped_testset} balls.")
 
-    batch_size = 256
-    steps = len(test_img) // batch_size + 1
     ds = create_dataset(test_img, test_labels, 1, trainset=False)
 
 
@@ -58,7 +56,6 @@ def distance_loss(y_pred, y_true):
     return torch.mean(r)
 
 
-import models
 model = models.create_network_v2(patch_height, patch_width)
 model.load_state_dict(torch.load(weight_file, map_location=device))
 model.to(device)

@@ -3,6 +3,10 @@ import torch
 from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
 
+import models
+from config import patch_height, patch_width, image_dir, testset_csv_collection
+from csv_label_reader import load_csv_collection
+from dataset_handling import create_dataset, yuv2rgb
 from scale import unscale_x, unscale_y
 from utils import get_flops
 
@@ -12,11 +16,6 @@ if __name__ != '__main__':
 # Set device
 device: torch.device = torch.device('cpu')  # Force CPU for visualization
 print(f"Using device: {device}")
-
-import models
-from config import patch_height, patch_width, image_dir, testset_csv_collection
-from csv_label_reader import load_csv_collection
-from dataset_handling import create_dataset, yuv2rgb
 
 png_files: dict[str, str] = {f.name: str(f) for f in image_dir.glob("**/*.png")}
 

@@ -310,7 +310,7 @@ def show_dataset(ds: DataLoader) -> None:
 
     plt.figure(figsize=(30, 30))
     for i in range(min(9, len(image_batch))):
-        ax = plt.subplot(3, 3, i + 1)
+        plt.subplot(3, 3, i + 1)
         
         # Convert CHW to HWC for display
         image = image_batch[i].permute(1, 2, 0).numpy()
