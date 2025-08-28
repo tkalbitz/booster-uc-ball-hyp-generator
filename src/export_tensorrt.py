@@ -140,7 +140,7 @@ def create_tensorrt_engine(
     
     dummy_input = torch.randn(max_batch_size, 3, patch_height, patch_width).to(torch_device)
     
-    print(f"Converting model to TensorRT...")
+    print("Converting model to TensorRT...")
     print(f"Input shape: {dummy_input.shape}")
     print(f"Using FP16: {fp16}")
     print(f"Using INT8: {int8}")
@@ -229,7 +229,7 @@ def create_trt_engine_from_onnx(
     profile.set_shape(input_tensor.name, input_shape, input_shape, input_shape)
     config.add_optimization_profile(profile)
     
-    print(f"Building TensorRT engine from ONNX...")
+    print("Building TensorRT engine from ONNX...")
     print(f"Input shape: {input_shape}")
     print(f"Using FP16: {fp16}")
     print(f"Using INT8: {int8}")

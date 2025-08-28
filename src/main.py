@@ -14,30 +14,37 @@ from scale import unscale_x, unscale_y
 from utils import get_flops
 
 # Set device
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
 
 import models
 from csv_label_reader import load_csv_collection
-from dataset_handling import create_dataset, show_dataset
+from dataset_handling import create_dataset
 from config import patch_width, patch_height, image_dir, testset_csv_collection, trainingset_csv_collection
 
-batch_size_train = 64
-batch_size_test = 128
+batch_size_train: int = 64
+batch_size_test: int = 128
 
-png_files = {f.name: str(f) for f in image_dir.glob("**/*.png")}
+png_files: dict[str, str] = {f.name: str(f) for f in image_dir.glob("**/*.png")}
 
+train_img: list[str]
+train_labels: list[tuple[int, int, int, int]]
+skipped_trainingset: int
 train_img, train_labels, skipped_trainingset = load_csv_collection(trainingset_csv_collection, png_files)
+
+test_img: list[str]
+test_labels: list[tuple[int, int, int, int]]
+skipped_testset: int
 test_img, test_labels, skipped_testset = load_csv_collection(testset_csv_collection, png_files)
 
 print(f"Trainingset contains {len(train_img)} and we removed {skipped_trainingset} balls.")
 print(f"Testset contains {len(test_img)} and we removed {skipped_testset} balls.")
 
-train_ds = create_dataset(train_img, train_labels, batch_size_train)
-test_ds = create_dataset(test_img, test_labels, batch_size_test)
+train_ds: torch.utils.data.DataLoader = create_dataset(train_img, train_labels, batch_size_train)
+test_ds: torch.utils.data.DataLoader = create_dataset(test_img, test_labels, batch_size_test, trainset=False)
 
-train_steps_per_epoch = (int(len(train_img) / batch_size_train) + 1)
-test_steps_per_epoch = (int(len(test_img) / batch_size_test))
+train_steps_per_epoch: int = (int(len(train_img) / batch_size_train) + 1)
+test_steps_per_epoch: int = (int(len(test_img) / batch_size_test))
 
 print(f"Train steps {train_steps_per_epoch}, test steps {test_steps_per_epoch}")
 
@@ -49,14 +56,14 @@ print(f"Train steps {train_steps_per_epoch}, test steps {test_steps_per_epoch}")
 class DistanceLoss(nn.Module):
     """Custom distance loss for ball detection."""
     
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__()
     
-    def _logcosh(self, x):
+    def _logcosh(self, x: torch.Tensor) -> torch.Tensor:
         """Stable log-cosh function."""
         return x + torch.nn.functional.softplus(-2. * x) - torch.log(torch.tensor(2.))
     
-    def forward(self, y_pred, y_true):
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
         y_t = torch.stack([unscale_x(y_true[:,0]), unscale_y(y_true[:,1])], dim=1)
         y_p = torch.stack([unscale_x(y_pred[:,0]), unscale_y(y_pred[:,1])], dim=1)
         
@@ -66,7 +73,7 @@ class DistanceLoss(nn.Module):
         return torch.mean(r)
 
 
-def calculate_accuracy(y_pred, y_true):
+def calculate_accuracy(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
     """Calculate accuracy for position prediction."""
     # Simple accuracy based on how close the predictions are
     diff = torch.abs(y_pred - y_true[:, :2])
@@ -75,7 +82,7 @@ def calculate_accuracy(y_pred, y_true):
     return accuracy
 
 
-def create_model():
+def create_model() -> tuple[torch.nn.Module, str, str]:
     """Create and initialize the model."""
     model = models.create_network_v2(patch_height, patch_width)
     model = model.to(device)
@@ -110,7 +117,7 @@ def create_model():
     return model, model_dir, log_dir
 
 
-def create_training_components(model, model_dir, log_dir):
+def create_training_components(model: torch.nn.Module, model_dir: str, log_dir: str) -> tuple[torch.optim.Optimizer, torch.nn.Module, torch.optim.lr_scheduler.ReduceLROnPlateau, SummaryWriter, object]:
     """Create optimizer, loss function, and logging components."""
     optimizer = optim.Adam(model.parameters(), lr=0.001, amsgrad=True)
     criterion = DistanceLoss()
@@ -128,7 +135,7 @@ def create_training_components(model, model_dir, log_dir):
     return optimizer, criterion, scheduler, writer, csv_file
 
 
-def train_model(model, train_loader, test_loader, optimizer, criterion, scheduler, writer, csv_file, model_dir, epochs=10000):
+def train_model(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, test_loader: torch.utils.data.DataLoader, optimizer: torch.optim.Optimizer, criterion: torch.nn.Module, scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau, writer: SummaryWriter, csv_file: object, model_dir: str, epochs: int = 10000) -> None:
     """Training loop for the model."""
     best_val_loss = float('inf')
     best_val_found_balls = 0.0

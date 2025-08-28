@@ -1,5 +1,3 @@
-import os
-import sys
 
 import torch
 from matplotlib import pyplot as plt
@@ -12,7 +10,7 @@ if __name__ != '__main__':
     exit(1)
 
 # Set device
-device = torch.device('cpu')  # Force CPU for visualization
+device: torch.device = torch.device('cpu')  # Force CPU for visualization
 print(f"Using device: {device}")
 
 import models
@@ -20,7 +18,7 @@ from config import patch_height, patch_width, image_dir, testset_csv_collection
 from csv_label_reader import load_csv_collection
 from dataset_handling import create_dataset, yuv2rgb
 
-png_files = {f.name: str(f) for f in image_dir.glob("**/*.png")}
+png_files: dict[str, str] = {f.name: str(f) for f in image_dir.glob("**/*.png")}
 
 test_img, test_labels, skipped_testset = load_csv_collection(testset_csv_collection, png_files)
 

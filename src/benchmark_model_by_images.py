@@ -1,7 +1,4 @@
 import torch
-import os
-from matplotlib import pyplot as plt
-from matplotlib.patches import Ellipse
 
 from scale import unscale_x, unscale_y
 
@@ -9,7 +6,7 @@ if __name__ != '__main__':
     exit(1)
 
 # Set device
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
 
 
@@ -18,23 +15,23 @@ from config import patch_height, patch_width, image_dir, testset_csv_collection
 from csv_label_reader import load_csv_collection
 from dataset_handling import create_dataset_image_based
 
-png_files = {f.name: str(f) for f in image_dir.glob("**/*.png")}
+png_files: dict[str, str] = {f.name: str(f) for f in image_dir.glob("**/*.png")}
 
 test_img, test_labels, skipped_testset = load_csv_collection(testset_csv_collection, png_files)
 
 print(f"Testset contains {len(test_img)} and we removed {skipped_testset} balls.")
 
-batch_size = 1
-steps = len(test_img) // batch_size + 1
+batch_size: int = 1
+steps: int = len(test_img) // batch_size + 1
 ds = create_dataset_image_based(test_img, test_labels, batch_size)
 
 # YUV 3830 model_file = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-17-20-31-42/weights.acc.208-0.957764.h5"
-model_file = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-22-09-23-23/weights.balls.284-0.955393-1.368752.h5"
+model_file: str = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-22-09-23-23/weights.balls.284-0.955393-1.368752.h5"
 
 model = models.create_network_v2(patch_height, patch_width)
 model.load_weights(model_file)
 
-ball_sum = 0
+ball_sum: int = 0
 it = iter(ds)
 
 for s in range(steps):

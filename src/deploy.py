@@ -1,15 +1,13 @@
-import os
 import shutil
 import sys
 
 import torch
 import torch.onnx
 
-from custom_metrics import FoundBallMetric
 from scale import unscale_x, unscale_y
 
 # Force CPU for deployment
-device = torch.device('cpu')
+device: torch.device = torch.device('cpu')
 print(f"Using device: {device}")
 
 from config import patch_height, patch_width, image_dir, testset_csv_collection
@@ -17,9 +15,9 @@ from csv_label_reader import load_csv_collection
 from dataset_handling import create_dataset
 
 
-deploy_dir = '/home/tkalbitz/naoTeamRepo/firmware_5.0/deploy/data/tflite/'
-detector_name = 'uc-ball-hyp-generator'
-weight_file = '/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-22-08-48-01/weights.balls.264-0.954385-1.292296.pth'
+deploy_dir: str = '/home/tkalbitz/naoTeamRepo/firmware_5.0/deploy/data/tflite/'
+detector_name: str = 'uc-ball-hyp-generator'
+weight_file: str = '/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-22-08-48-01/weights.balls.264-0.954385-1.292296.pth'
 
 if len(sys.argv) == 2:
     weight_file = sys.argv[1]

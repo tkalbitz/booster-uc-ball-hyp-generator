@@ -1,7 +1,4 @@
 import torch
-import os
-from matplotlib import pyplot as plt
-from matplotlib.patches import Ellipse
 
 from scale import unscale_x, unscale_y
 
@@ -9,7 +6,7 @@ if __name__ != '__main__':
     exit(1)
 
 # Set device
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
 
 import models
@@ -17,14 +14,14 @@ from config import patch_height, patch_width, image_dir, testset_csv_collection
 from csv_label_reader import load_csv_collection
 from dataset_handling import create_dataset
 
-png_files = {f.name: str(f) for f in image_dir.glob("**/*.png")}
+png_files: dict[str, str] = {f.name: str(f) for f in image_dir.glob("**/*.png")}
 
 test_img, test_labels, skipped_testset = load_csv_collection(testset_csv_collection, png_files)
 
 print(f"Testset contains {len(test_img)} and we removed {skipped_testset} balls.")
 
-batch_size = 200
-steps = len(test_img) // batch_size
+batch_size: int = 200
+steps: int = len(test_img) // batch_size
 ds = create_dataset(test_img, test_labels, batch_size, trainset=False)
 
 # RGB 3804 model_file = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/2021-05-17-17-57-51/weights.loss.152-1.657603.h5"

@@ -1,18 +1,14 @@
-import os
 import re
-import shutil
-import sys
-import collections
 from pathlib import Path
 
 
-def read_csv_label(csv_file: Path, img_files: dict) -> list:
+def read_csv_label(csv_file: Path, img_files: dict[str, str]) -> tuple[tuple[list[str], list[tuple[int, int, int, int]], list[str]], int]:
     regex = re.compile(r"(.+_U\.png);\d+;[^;]+;Ball;(\d+);(\d+);(\d+);(\d+);Ball")
-    ignore = re.compile(r"(.+_U\.png);\d+;[^;]+;Ignore");
+    ignore = re.compile(r"(.+_U\.png);\d+;[^;]+;Ignore")
 
-    skipped_balls = 0
-    result = {}
-    found_files = set()
+    skipped_balls: int = 0
+    result: dict[str, tuple[str, tuple[int, int, int, int], str]] = {}
+    found_files: set[str] = set()
 
     for line in csv_file.open():
 
@@ -59,16 +55,21 @@ def read_csv_label(csv_file: Path, img_files: dict) -> list:
         result[img_file] = (img_files[img_file], (x1, y1, x2, y2), line)
 
     if len(result.values()) == 0:
-        return [[], [], []], skipped_balls
+        empty_imgs: list[str] = []
+        empty_labels: list[tuple[int, int, int, int]] = []
+        empty_lines: list[str] = []
+        return (empty_imgs, empty_labels, empty_lines), skipped_balls
 
-    return list(zip(*result.values())), skipped_balls
+    values = list(result.values())
+    imgs, labels, lines = zip(*values)
+    return (list(imgs), list(labels), list(lines)), skipped_balls
 
 
-def load_csv_collection(file: Path, img_files: dict):
-    res_imgs = []
-    res_labels = []
-    res_lines = []
-    skipped = 0
+def load_csv_collection(file: Path, img_files: dict[str, str]) -> tuple[list[str], list[tuple[int, int, int, int]], int]:
+    res_imgs: list[str] = []
+    res_labels: list[tuple[int, int, int, int]] = []
+    res_lines: list[str] = []
+    skipped: int = 0
 
     for csv_file in file.open():
         [imgs, labels, lines], ignored = read_csv_label(file.parent / csv_file.strip(), img_files)
@@ -92,10 +93,10 @@ def load_csv_collection(file: Path, img_files: dict):
 if __name__ == '__main__':
     start_dir = Path('/home/tkalbitz/temp/BallImages/')
 
-    cnt_balls = 0
-    to_small = 0
+    cnt_balls: int = 0
+    to_small: int = 0
 
-    png_files = {f.name: f for f in start_dir.glob("**/*.png")}
+    png_files: dict[str, str] = {f.name: str(f) for f in start_dir.glob("**/*.png")}
 
     for csv_file in list(start_dir.glob("**/labels.csv")):
         [img_path, ball_label, _], file_to_small = read_csv_label(csv_file, png_files)

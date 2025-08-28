@@ -13,13 +13,15 @@ dependencies = [
     "pillow>=8.0.0",
     "numpy>=1.21.0",
     "tensorboard>=2.0.0",
-    "torch2trt>=0.4.0",
     "tensorrt>=8.0.0",
-    "pycuda>=2021.1",
 ]
 
 [dependency-groups]
-dev = ["ruff>=0.12.10", "ty>=0.0.1a19"]
+dev = [
+    "mypy>=1.17.1",
+    "ruff>=0.12.10",
+    "ty>=0.0.1a19",
+]
 
 [tool.ruff]
 line-length = 120

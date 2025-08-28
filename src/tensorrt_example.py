@@ -4,7 +4,7 @@
 from pathlib import Path
 
 from export_tensorrt import create_tensorrt_engine, create_trt_engine_from_onnx
-from inference_tensorrt import benchmark_inference, run_inference_on_image
+from inference_tensorrt import benchmark_inference
 
 
 def example_export_workflow() -> None:
@@ -68,8 +68,8 @@ def example_export_workflow() -> None:
     engine_int8_path = deploy_dir / "ball_detector_int8.engine"
     
     # First export to ONNX (you can use the existing deploy.py for this)
-    print(f"   Export to ONNX first using deploy.py")
-    print(f"   Then convert ONNX to TensorRT engine...")
+    print("   Export to ONNX first using deploy.py")
+    print("   Then convert ONNX to TensorRT engine...")
     
     if onnx_path.exists():
         try:
@@ -110,7 +110,7 @@ def example_export_workflow() -> None:
             print(f"✗ ONNX->TensorRT INT8 conversion failed: {e}")
     else:
         print(f"   ONNX file not found at {onnx_path}")
-        print(f"   Run deploy.py first to create the ONNX model")
+        print("   Run deploy.py first to create the ONNX model")
 
 
 def print_usage_instructions() -> None:

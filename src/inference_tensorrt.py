@@ -10,10 +10,8 @@ import numpy as np
 from PIL import Image
 import tensorrt as trt
 import pycuda.driver as cuda
-import pycuda.autoinit
 
 from config import patch_height, patch_width
-from dataset_handling import yuv2rgb
 from scale import unscale_x, unscale_y
 
 
