@@ -2,20 +2,18 @@
 """Compare accuracy between different precision TensorRT models."""
 
 import sys
-import time
 from pathlib import Path
-from typing import Any
+from typing import Iterator, Union
 
 import torch
-import numpy as np
+from torch.utils.data import DataLoader
 
 from inference_tensorrt import TensorRTInference
 import models
 from config import patch_height, patch_width, image_dir, testset_csv_collection
 from csv_label_reader import load_csv_collection
 from dataset_handling import create_dataset
-from scale import unscale_x, unscale_y
-from custom_metrics import FoundBallMetric
+from model_evaluation import evaluate_model_accuracy, EvaluationMetrics
 
 
 def load_pytorch_model(model_path: str, device: str = "cuda") -> torch.nn.Module:
@@ -36,95 +34,6 @@ def load_pytorch_model(model_path: str, device: str = "cuda") -> torch.nn.Module
     return model
 
 
-def evaluate_model_accuracy(
-    model: Any, 
-    data_loader: Any, 
-    model_type: str,
-    device: torch.device | None = None,
-    num_samples: int = 1000
-) -> dict[str, float]:
-    """Evaluate model accuracy on test data.
-    
-    Args:
-        model: Model to evaluate (PyTorch or TensorRT)
-        data_loader: Data loader with test samples
-        model_type: Type of model ("pytorch", "tensorrt")
-        device: Device to run evaluation on (for PyTorch models)
-        num_samples: Number of samples to evaluate
-        
-    Returns:
-        Dictionary with accuracy metrics
-    """
-    if device is None:
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    
-    found_ball_metric = FoundBallMetric()
-    total_samples = 0
-    total_time = 0.0
-    distance_errors = []
-    
-    for batch_idx, (images, labels) in enumerate(data_loader):
-        if total_samples >= num_samples:
-            break
-            
-        if model_type == "pytorch":
-            images = images.to(device)
-            start_time = time.time()
-            with torch.no_grad():
-                predictions = model(images)
-            inference_time = time.time() - start_time
-            
-            predictions_np = predictions.cpu().numpy()
-            
-        elif model_type == "tensorrt":
-            images_np = images.numpy()
-            start_time = time.time()
-            predictions_np = model.predict(images_np)
-            inference_time = time.time() - start_time
-            
-        else:
-            msg = f"Unknown model type: {model_type}"
-            raise ValueError(msg)
-        
-        total_time += inference_time
-        
-        labels_np = labels.numpy()
-        
-        for i in range(len(predictions_np)):
-            pred = predictions_np[i]
-            true = labels_np[i]
-            
-            x_pred = unscale_x(pred[0]) + patch_width / 2
-            y_pred = unscale_y(pred[1]) + patch_height / 2
-            
-            x_true = unscale_x(true[0]) + patch_width / 2
-            y_true = unscale_y(true[1]) + patch_height / 2
-            radius = true[2]
-            
-            distance = np.sqrt((x_pred - x_true)**2 + (y_pred - y_true)**2)
-            distance_errors.append(distance)
-            
-            found = distance < radius
-            if found:
-                found_ball_metric.found_balls += 1
-            found_ball_metric.totals_balls += 1
-            
-            total_samples += 1
-            if total_samples >= num_samples:
-                break
-    
-    accuracy = found_ball_metric.result()
-    avg_inference_time = (total_time / total_samples) * 1000  # Convert to ms
-    mean_distance_error = np.mean(distance_errors)
-    std_distance_error = np.std(distance_errors)
-    
-    return {
-        "accuracy": accuracy,
-        "avg_inference_time_ms": avg_inference_time,
-        "mean_distance_error": mean_distance_error,
-        "std_distance_error": std_distance_error,
-        "total_samples": total_samples
-    }
 
 
 def compare_model_precisions(
@@ -148,13 +57,13 @@ def compare_model_precisions(
         png_files = {f.name: str(f) for f in image_dir.glob("**/*.png")}
         test_img, test_labels, _ = load_csv_collection(testset_csv_collection, png_files)
         
-        data_loader = create_dataset(test_img, test_labels, 1, trainset=False)
+        data_loader: Union[DataLoader, Iterator[tuple[torch.Tensor, torch.Tensor]]] = create_dataset(test_img, test_labels, 1, trainset=False)
         
     except Exception as e:
         print(f"Warning: Could not load real test data: {e}")
         print("Using synthetic data for comparison...")
         
-        def synthetic_data_loader():
+        def synthetic_data_loader() -> Iterator[tuple[torch.Tensor, torch.Tensor]]:
             for _ in range(num_samples):
                 images = torch.randn(1, 3, patch_height, patch_width)
                 labels = torch.tensor([[0.1, 0.1, 10.0]])  # Synthetic label
@@ -162,7 +71,7 @@ def compare_model_precisions(
         
         data_loader = synthetic_data_loader()
     
-    results = {}
+    results: dict[str, EvaluationMetrics] = {}
     
     # Evaluate original PyTorch model
     print("1. Evaluating PyTorch FP32 model...")
@@ -172,8 +81,8 @@ def compare_model_precisions(
         results["pytorch_fp32"] = evaluate_model_accuracy(
             pytorch_model, data_loader, "pytorch", device, num_samples
         )
-        print(f"   ✓ Accuracy: {results['pytorch_fp32']['accuracy']:.4f}")
-        print(f"   ✓ Avg time: {results['pytorch_fp32']['avg_inference_time_ms']:.2f} ms")
+        print(f"   ✓ Accuracy: {results['pytorch_fp32'].accuracy:.4f}")
+        print(f"   ✓ Avg time: {results['pytorch_fp32'].avg_inference_time_ms:.2f} ms")
         
     except Exception as e:
         print(f"   ✗ Failed to evaluate PyTorch model: {e}")
@@ -188,8 +97,8 @@ def compare_model_precisions(
             results["tensorrt_fp16"] = evaluate_model_accuracy(
                 fp16_model, data_loader_fp16, "tensorrt", device, num_samples
             )
-            print(f"   ✓ Accuracy: {results['tensorrt_fp16']['accuracy']:.4f}")
-            print(f"   ✓ Avg time: {results['tensorrt_fp16']['avg_inference_time_ms']:.2f} ms")
+            print(f"   ✓ Accuracy: {results['tensorrt_fp16'].accuracy:.4f}")
+            print(f"   ✓ Avg time: {results['tensorrt_fp16'].avg_inference_time_ms:.2f} ms")
             
         except Exception as e:
             print(f"   ✗ Failed to evaluate FP16 model: {e}")
@@ -206,8 +115,8 @@ def compare_model_precisions(
             results["tensorrt_int8"] = evaluate_model_accuracy(
                 int8_model, data_loader_int8, "tensorrt", device, num_samples
             )
-            print(f"   ✓ Accuracy: {results['tensorrt_int8']['accuracy']:.4f}")
-            print(f"   ✓ Avg time: {results['tensorrt_int8']['avg_inference_time_ms']:.2f} ms")
+            print(f"   ✓ Accuracy: {results['tensorrt_int8'].accuracy:.4f}")
+            print(f"   ✓ Avg time: {results['tensorrt_int8'].avg_inference_time_ms:.2f} ms")
             
         except Exception as e:
             print(f"   ✗ Failed to evaluate INT8 model: {e}")
@@ -220,15 +129,16 @@ def compare_model_precisions(
         print(f"{'Model':<15} {'Accuracy':<10} {'Time (ms)':<12} {'Speedup':<10} {'Accuracy Loss':<15}")
         print("-" * 70)
         
-        baseline_time = results.get("pytorch_fp32", {}).get("avg_inference_time_ms", 1.0)
-        baseline_accuracy = results.get("pytorch_fp32", {}).get("accuracy", 1.0)
+        baseline_metrics = results.get("pytorch_fp32")
+        baseline_time = baseline_metrics.avg_inference_time_ms if baseline_metrics else 1.0
+        baseline_accuracy = baseline_metrics.accuracy if baseline_metrics else 1.0
         
         for model_name, metrics in results.items():
-            speedup = baseline_time / metrics["avg_inference_time_ms"]
-            accuracy_loss = (baseline_accuracy - metrics["accuracy"]) * 100
+            speedup = baseline_time / metrics.avg_inference_time_ms
+            accuracy_loss = (baseline_accuracy - metrics.accuracy) * 100
             
-            print(f"{model_name:<15} {metrics['accuracy']:<10.4f} "
-                  f"{metrics['avg_inference_time_ms']:<12.2f} "
+            print(f"{model_name:<15} {metrics.accuracy:<10.4f} "
+                  f"{metrics.avg_inference_time_ms:<12.2f} "
                   f"{speedup:<10.2f}x {accuracy_loss:<15.2f}%")
 
 
