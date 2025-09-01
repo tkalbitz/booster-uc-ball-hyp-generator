@@ -67,9 +67,9 @@ def test_load_image_basic() -> None:
 
     try:
         with (
-            patch("src.dataset_handling.img_scaled_height", 120),
-            patch("src.dataset_handling.img_scaled_width", 160),
-            patch("src.dataset_handling.scale_factor_f", 4.0),
+            patch("uc_ball_hyp_generator.dataset_handling.img_scaled_height", 120),
+            patch("uc_ball_hyp_generator.dataset_handling.img_scaled_width", 160),
+            patch("uc_ball_hyp_generator.dataset_handling.scale_factor_f", 4.0),
         ):
             image_tensor, label_tensor = load_image(str(test_img_path), label)
 
@@ -95,7 +95,7 @@ def test_load_image_label_calculations() -> None:
     label = (10, 20, 30, 40)  # x1, y1, x2, y2
 
     try:
-        with patch("src.dataset_handling.scale_factor_f", 2.0):
+        with patch("uc_ball_hyp_generator.dataset_handling.scale_factor_f", 2.0):
             image_tensor, label_tensor = load_image(str(test_img_path), label)
 
             # Expected calculations:
@@ -122,10 +122,10 @@ def test_crop_image_by_image() -> None:
     label = torch.tensor([50.0, 60.0, 10.0])  # center_x, center_y, diameter
 
     with (
-        patch("src.dataset_handling.img_scaled_width", 160),
-        patch("src.dataset_handling.img_scaled_height", 120),
-        patch("src.dataset_handling.patch_width", 40),
-        patch("src.dataset_handling.patch_height", 30),
+        patch("uc_ball_hyp_generator.dataset_handling.img_scaled_width", 160),
+        patch("uc_ball_hyp_generator.dataset_handling.img_scaled_height", 120),
+        patch("uc_ball_hyp_generator.dataset_handling.patch_width", 40),
+        patch("uc_ball_hyp_generator.dataset_handling.patch_height", 30),
     ):
         cropped_image, adjusted_label = crop_image_by_image(image, label)
 
@@ -143,7 +143,7 @@ def test_calculate_random_crop_bounds() -> None:
     cy = torch.tensor(60.0)
     d = torch.tensor(20.0)
 
-    with patch("src.dataset_handling.patch_width", 40), patch("src.dataset_handling.patch_height", 30):
+    with patch("uc_ball_hyp_generator.dataset_handling.patch_width", 40), patch("uc_ball_hyp_generator.dataset_handling.patch_height", 30):
         x, y = _calculate_random_crop_bounds(cx, cy, d)
 
         assert isinstance(x, int)
@@ -155,10 +155,10 @@ def test_calculate_random_crop_bounds() -> None:
 def test_adjust_crop_bounds() -> None:
     """Test _adjust_crop_bounds function."""
     with (
-        patch("src.dataset_handling.patch_width", 40),
-        patch("src.dataset_handling.patch_height", 30),
-        patch("src.dataset_handling.img_scaled_width", 160),
-        patch("src.dataset_handling.img_scaled_height", 120),
+        patch("uc_ball_hyp_generator.dataset_handling.patch_width", 40),
+        patch("uc_ball_hyp_generator.dataset_handling.patch_height", 30),
+        patch("uc_ball_hyp_generator.dataset_handling.img_scaled_width", 160),
+        patch("uc_ball_hyp_generator.dataset_handling.img_scaled_height", 120),
     ):
         # Test normal case
         start_x, start_y, end_x, end_y = _adjust_crop_bounds(50, 45)
@@ -182,10 +182,10 @@ def test_crop_image_random_with_ball() -> None:
     label = torch.tensor([50.0, 60.0, 10.0])
 
     with (
-        patch("src.dataset_handling.patch_width", 40),
-        patch("src.dataset_handling.patch_height", 30),
-        patch("src.dataset_handling.img_scaled_width", 160),
-        patch("src.dataset_handling.img_scaled_height", 120),
+        patch("uc_ball_hyp_generator.dataset_handling.patch_width", 40),
+        patch("uc_ball_hyp_generator.dataset_handling.patch_height", 30),
+        patch("uc_ball_hyp_generator.dataset_handling.img_scaled_width", 160),
+        patch("uc_ball_hyp_generator.dataset_handling.img_scaled_height", 120),
     ):
         cropped_image, adjusted_label = crop_image_random_with_ball(image, label)
 
@@ -200,10 +200,10 @@ def test_final_adjustments() -> None:
     label = torch.tensor([20.0, 15.0, 10.0])
 
     with (
-        patch("src.dataset_handling.patch_width", 40),
-        patch("src.dataset_handling.patch_height", 30),
-        patch("src.dataset_handling.scale_x") as mock_scale_x,
-        patch("src.dataset_handling.scale_y") as mock_scale_y,
+        patch("uc_ball_hyp_generator.dataset_handling.patch_width", 40),
+        patch("uc_ball_hyp_generator.dataset_handling.patch_height", 30),
+        patch("uc_ball_hyp_generator.dataset_handling.scale_x") as mock_scale_x,
+        patch("uc_ball_hyp_generator.dataset_handling.scale_y") as mock_scale_y,
     ):
         mock_scale_x.return_value = 0.5
         mock_scale_y.return_value = -0.3
@@ -225,10 +225,10 @@ def test_final_adjustments_patches() -> None:
     labels = torch.tensor([[20.0, 15.0, 10.0], [25.0, 20.0, 12.0], [30.0, 25.0, 8.0], [35.0, 30.0, 15.0]])
 
     with (
-        patch("src.dataset_handling.patch_width", 40),
-        patch("src.dataset_handling.patch_height", 30),
-        patch("src.dataset_handling.scale_x") as mock_scale_x,
-        patch("src.dataset_handling.scale_y") as mock_scale_y,
+        patch("uc_ball_hyp_generator.dataset_handling.patch_width", 40),
+        patch("uc_ball_hyp_generator.dataset_handling.patch_height", 30),
+        patch("uc_ball_hyp_generator.dataset_handling.scale_x") as mock_scale_x,
+        patch("uc_ball_hyp_generator.dataset_handling.scale_y") as mock_scale_y,
     ):
         mock_scale_x.return_value = torch.tensor([0.1, 0.2, 0.3, 0.4])
         mock_scale_y.return_value = torch.tensor([-0.1, -0.2, -0.3, -0.4])
@@ -331,9 +331,9 @@ def test_ball_dataset_getitem_train() -> None:
 
     try:
         with (
-            patch("src.dataset_handling.crop_image_random_with_ball") as mock_crop,
-            patch("src.dataset_handling.train_augment_image") as mock_augment,
-            patch("src.dataset_handling.final_adjustments") as mock_final,
+            patch("uc_ball_hyp_generator.dataset_handling.crop_image_random_with_ball") as mock_crop,
+            patch("uc_ball_hyp_generator.dataset_handling.train_augment_image") as mock_augment,
+            patch("uc_ball_hyp_generator.dataset_handling.final_adjustments") as mock_final,
         ):
             # Set up mocks
             mock_image = torch.ones((3, 30, 40))
@@ -363,9 +363,9 @@ def test_ball_dataset_getitem_test() -> None:
 
     try:
         with (
-            patch("src.dataset_handling.crop_image_by_image") as mock_crop,
-            patch("src.dataset_handling.test_augment_image") as mock_augment,
-            patch("src.dataset_handling.final_adjustments") as mock_final,
+            patch("uc_ball_hyp_generator.dataset_handling.crop_image_by_image") as mock_crop,
+            patch("uc_ball_hyp_generator.dataset_handling.test_augment_image") as mock_augment,
+            patch("uc_ball_hyp_generator.dataset_handling.final_adjustments") as mock_final,
         ):
             # Set up mocks
             mock_image = torch.ones((3, 30, 40))

@@ -71,8 +71,8 @@ def test_update_state_perfect_prediction() -> None:
     y_pred = torch.tensor([[0.0, 0.0, 10.0]])  # identical prediction
 
     with (
-        patch("src.custom_metrics.unscale_x", side_effect=lambda x: x),
-        patch("src.custom_metrics.unscale_y", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_x", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_y", side_effect=lambda x: x),
     ):
         metric.update_state(y_true, y_pred)
 
@@ -91,8 +91,8 @@ def test_update_state_prediction_within_radius() -> None:
     y_pred = torch.tensor([[5.0, 5.0, 10.0]])
 
     with (
-        patch("src.custom_metrics.unscale_x", side_effect=lambda x: x),
-        patch("src.custom_metrics.unscale_y", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_x", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_y", side_effect=lambda x: x),
     ):
         metric.update_state(y_true, y_pred)
 
@@ -111,8 +111,8 @@ def test_update_state_prediction_outside_radius() -> None:
     y_pred = torch.tensor([[15.0, 0.0, 10.0]])
 
     with (
-        patch("src.custom_metrics.unscale_x", side_effect=lambda x: x),
-        patch("src.custom_metrics.unscale_y", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_x", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_y", side_effect=lambda x: x),
     ):
         metric.update_state(y_true, y_pred)
 
@@ -143,8 +143,8 @@ def test_update_state_batch_mixed_results() -> None:
     )
 
     with (
-        patch("src.custom_metrics.unscale_x", side_effect=lambda x: x),
-        patch("src.custom_metrics.unscale_y", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_x", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_y", side_effect=lambda x: x),
     ):
         metric.update_state(y_true, y_pred)
 
@@ -166,8 +166,8 @@ def test_update_state_multiple_calls() -> None:
     y_pred2 = torch.tensor([[5.0, 5.0, 20.0]])  # Found
 
     with (
-        patch("src.custom_metrics.unscale_x", side_effect=lambda x: x),
-        patch("src.custom_metrics.unscale_y", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_x", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_y", side_effect=lambda x: x),
     ):
         metric.update_state(y_true1, y_pred1)
         metric.update_state(y_true2, y_pred2)
@@ -185,8 +185,8 @@ def test_update_state_calls_unscale_functions() -> None:
     y_pred = torch.tensor([[-0.5, 0.5, 10.0]])
 
     with (
-        patch("src.custom_metrics.unscale_x") as mock_unscale_x,
-        patch("src.custom_metrics.unscale_y") as mock_unscale_y,
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_x") as mock_unscale_x,
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_y") as mock_unscale_y,
     ):
         # Set up mock returns to make calculation simple
         mock_unscale_x.side_effect = lambda x: x * 100  # Scale up for testing
@@ -208,8 +208,8 @@ def test_update_state_adds_patch_offset() -> None:
     y_pred = torch.tensor([[0.0, 0.0, 10.0]])
 
     with (
-        patch("src.custom_metrics.unscale_x") as mock_unscale_x,
-        patch("src.custom_metrics.unscale_y") as mock_unscale_y,
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_x") as mock_unscale_x,
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_y") as mock_unscale_y,
     ):
         mock_unscale_x.return_value = torch.tensor([100.0])  # Mock return value
         mock_unscale_y.return_value = torch.tensor([200.0])  # Mock return value
@@ -232,8 +232,8 @@ def test_update_state_tensor_conversion() -> None:
     y_pred = torch.tensor([[0.0, 0.0, 10.0]])
 
     with (
-        patch("src.custom_metrics.unscale_x", return_value=0.0),
-        patch("src.custom_metrics.unscale_y", return_value=0.0),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_x", return_value=0.0),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_y", return_value=0.0),
     ):
         # Should not raise any tensor conversion errors
         metric.update_state(y_true, y_pred)
@@ -249,8 +249,8 @@ def test_update_state_with_sample_weight_none() -> None:
     y_pred = torch.tensor([[3.0, 4.0, 10.0]])
 
     with (
-        patch("src.custom_metrics.unscale_x", side_effect=lambda x: x),
-        patch("src.custom_metrics.unscale_y", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_x", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.custom_metrics.unscale_y", side_effect=lambda x: x),
     ):
         # sample_weight parameter exists but is not used in current implementation
         metric.update_state(y_true, y_pred, sample_weight=None)

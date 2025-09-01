@@ -60,8 +60,8 @@ def test_distance_loss_forward_identical_predictions() -> None:
     y_pred = torch.tensor([[0.0, 0.0, 10.0]])
 
     with (
-        patch("src.model_setup.unscale_x", side_effect=lambda x: x),
-        patch("src.model_setup.unscale_y", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.model_setup.unscale_x", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.model_setup.unscale_y", side_effect=lambda x: x),
     ):
         result = loss.forward(y_pred, y_true)
 
@@ -79,8 +79,8 @@ def test_distance_loss_forward_different_predictions() -> None:
     y_pred = torch.tensor([[5.0, 5.0, 10.0]])  # Different from true
 
     with (
-        patch("src.model_setup.unscale_x", side_effect=lambda x: x),
-        patch("src.model_setup.unscale_y", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.model_setup.unscale_x", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.model_setup.unscale_y", side_effect=lambda x: x),
     ):
         result = loss.forward(y_pred, y_true)
 
@@ -97,8 +97,8 @@ def test_distance_loss_forward_batch() -> None:
     y_pred = torch.tensor([[0.5, 0.5, 10.0], [1.5, 1.5, 5.0]])
 
     with (
-        patch("src.model_setup.unscale_x", side_effect=lambda x: x),
-        patch("src.model_setup.unscale_y", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.model_setup.unscale_x", side_effect=lambda x: x),
+        patch("uc_ball_hyp_generator.model_setup.unscale_y", side_effect=lambda x: x),
     ):
         result = loss.forward(y_pred, y_true)
 
@@ -115,7 +115,7 @@ def test_distance_loss_tensor_conversion() -> None:
     y_pred = torch.tensor([[1.0, 1.0, 10.0]])
 
     # Mock unscale functions to return scalar values instead of tensors
-    with patch("src.model_setup.unscale_x") as mock_unscale_x, patch("src.model_setup.unscale_y") as mock_unscale_y:
+    with patch("uc_ball_hyp_generator.model_setup.unscale_x") as mock_unscale_x, patch("uc_ball_hyp_generator.model_setup.unscale_y") as mock_unscale_y:
         # Return tensors with appropriate shapes to test tensor conversion logic
         mock_unscale_x.side_effect = lambda x: torch.tensor([2.0]) if x[0].item() == 0.0 else torch.tensor([3.0])
         mock_unscale_y.side_effect = lambda x: torch.tensor([4.0]) if x[0].item() == 0.0 else torch.tensor([5.0])
@@ -132,13 +132,13 @@ def test_create_model_basic() -> None:
 
     try:
         with (
-            patch("src.model_setup.models.create_network_v2") as mock_create_network,
-            patch("src.model_setup.get_flops", return_value=1000000),
-            patch("src.model_setup.sys.argv", ["script.py", "test_model"]),
-            patch("src.model_setup.os.makedirs"),
-            patch("src.model_setup.shutil.copy2"),
-            patch("src.model_setup.torch.save"),
-            patch("src.model_setup.Path") as mock_path,
+            patch("uc_ball_hyp_generator.model_setup.models.create_network_v2") as mock_create_network,
+            patch("uc_ball_hyp_generator.model_setup.get_flops", return_value=1000000),
+            patch("uc_ball_hyp_generator.model_setup.sys.argv", ["script.py", "test_model"]),
+            patch("uc_ball_hyp_generator.model_setup.os.makedirs"),
+            patch("uc_ball_hyp_generator.model_setup.shutil.copy2"),
+            patch("uc_ball_hyp_generator.model_setup.torch.save"),
+            patch("uc_ball_hyp_generator.model_setup.Path") as mock_path,
         ):
             mock_model = MockModel()
             mock_create_network.return_value = mock_model
@@ -157,14 +157,14 @@ def test_create_model_basic() -> None:
 def test_create_model_with_compilation() -> None:
     """Test create_model with torch compilation enabled."""
     with (
-        patch("src.model_setup.models.create_network_v2") as mock_create_network,
-        patch("src.model_setup.get_flops", return_value=1000000),
-        patch("src.model_setup.sys.argv", ["script.py", "test_model"]),
-        patch("src.model_setup.os.makedirs"),
-        patch("src.model_setup.shutil.copy2"),
-        patch("src.model_setup.torch.save"),
-        patch("src.model_setup.Path") as mock_path,
-        patch("src.model_setup.torch.compile") as mock_compile,
+        patch("uc_ball_hyp_generator.model_setup.models.create_network_v2") as mock_create_network,
+        patch("uc_ball_hyp_generator.model_setup.get_flops", return_value=1000000),
+        patch("uc_ball_hyp_generator.model_setup.sys.argv", ["script.py", "test_model"]),
+        patch("uc_ball_hyp_generator.model_setup.os.makedirs"),
+        patch("uc_ball_hyp_generator.model_setup.shutil.copy2"),
+        patch("uc_ball_hyp_generator.model_setup.torch.save"),
+        patch("uc_ball_hyp_generator.model_setup.Path") as mock_path,
+        patch("uc_ball_hyp_generator.model_setup.torch.compile") as mock_compile,
     ):
         mock_model = MockModel()
         mock_create_network.return_value = mock_model
@@ -181,15 +181,15 @@ def test_create_model_with_compilation() -> None:
 def test_create_model_compilation_failure() -> None:
     """Test create_model when compilation fails."""
     with (
-        patch("src.model_setup.models.create_network_v2") as mock_create_network,
-        patch("src.model_setup.get_flops", return_value=1000000),
-        patch("src.model_setup.sys.argv", ["script.py", "test_model"]),
-        patch("src.model_setup.os.makedirs"),
-        patch("src.model_setup.shutil.copy2"),
-        patch("src.model_setup.torch.save"),
-        patch("src.model_setup.Path") as mock_path,
-        patch("src.model_setup.torch.compile", side_effect=RuntimeError("Compilation failed")),
-        patch("src.model_setup._logger") as mock_logger,
+        patch("uc_ball_hyp_generator.model_setup.models.create_network_v2") as mock_create_network,
+        patch("uc_ball_hyp_generator.model_setup.get_flops", return_value=1000000),
+        patch("uc_ball_hyp_generator.model_setup.sys.argv", ["script.py", "test_model"]),
+        patch("uc_ball_hyp_generator.model_setup.os.makedirs"),
+        patch("uc_ball_hyp_generator.model_setup.shutil.copy2"),
+        patch("uc_ball_hyp_generator.model_setup.torch.save"),
+        patch("uc_ball_hyp_generator.model_setup.Path") as mock_path,
+        patch("uc_ball_hyp_generator.model_setup.torch.compile", side_effect=RuntimeError("Compilation failed")),
+        patch("uc_ball_hyp_generator.model_setup._logger") as mock_logger,
     ):
         mock_model = MockModel()
         mock_create_network.return_value = mock_model
@@ -205,14 +205,14 @@ def test_create_model_compilation_failure() -> None:
 def test_create_model_auto_naming() -> None:
     """Test create_model with automatic model naming."""
     with (
-        patch("src.model_setup.models.create_network_v2") as mock_create_network,
-        patch("src.model_setup.get_flops", return_value=1000000),
-        patch("src.model_setup.sys.argv", ["script.py"]),
-        patch("src.model_setup.time.strftime", return_value="2023-01-15-12-30-45"),
-        patch("src.model_setup.os.makedirs"),
-        patch("src.model_setup.shutil.copy2"),
-        patch("src.model_setup.torch.save"),
-        patch("src.model_setup.Path") as mock_path,
+        patch("uc_ball_hyp_generator.model_setup.models.create_network_v2") as mock_create_network,
+        patch("uc_ball_hyp_generator.model_setup.get_flops", return_value=1000000),
+        patch("uc_ball_hyp_generator.model_setup.sys.argv", ["script.py"]),
+        patch("uc_ball_hyp_generator.model_setup.time.strftime", return_value="2023-01-15-12-30-45"),
+        patch("uc_ball_hyp_generator.model_setup.os.makedirs"),
+        patch("uc_ball_hyp_generator.model_setup.shutil.copy2"),
+        patch("uc_ball_hyp_generator.model_setup.torch.save"),
+        patch("uc_ball_hyp_generator.model_setup.Path") as mock_path,
     ):
         mock_model = MockModel()
         mock_create_network.return_value = mock_model
@@ -227,9 +227,9 @@ def test_create_model_auto_naming() -> None:
 def test_create_model_test_mode() -> None:
     """Test create_model with --test argument."""
     with (
-        patch("src.model_setup.models.create_network_v2") as mock_create_network,
-        patch("src.model_setup.sys.argv", ["script.py", "--test"]),
-        patch("src.model_setup.sys.exit") as mock_exit,
+        patch("uc_ball_hyp_generator.model_setup.models.create_network_v2") as mock_create_network,
+        patch("uc_ball_hyp_generator.model_setup.sys.argv", ["script.py", "--test"]),
+        patch("uc_ball_hyp_generator.model_setup.sys.exit") as mock_exit,
     ):
         mock_model = MockModel()
         mock_create_network.return_value = mock_model
@@ -245,14 +245,14 @@ def test_create_model_test_mode() -> None:
 def test_create_model_flops_calculation_failure() -> None:
     """Test create_model when FLOP calculation fails."""
     with (
-        patch("src.model_setup.models.create_network_v2") as mock_create_network,
-        patch("src.model_setup.get_flops", side_effect=RuntimeError("FLOP calculation failed")),
-        patch("src.model_setup.sys.argv", ["script.py", "test_model"]),
-        patch("src.model_setup.os.makedirs"),
-        patch("src.model_setup.shutil.copy2"),
-        patch("src.model_setup.torch.save"),
-        patch("src.model_setup.Path") as mock_path,
-        patch("src.model_setup._logger") as mock_logger,
+        patch("uc_ball_hyp_generator.model_setup.models.create_network_v2") as mock_create_network,
+        patch("uc_ball_hyp_generator.model_setup.get_flops", side_effect=RuntimeError("FLOP calculation failed")),
+        patch("uc_ball_hyp_generator.model_setup.sys.argv", ["script.py", "test_model"]),
+        patch("uc_ball_hyp_generator.model_setup.os.makedirs"),
+        patch("uc_ball_hyp_generator.model_setup.shutil.copy2"),
+        patch("uc_ball_hyp_generator.model_setup.torch.save"),
+        patch("uc_ball_hyp_generator.model_setup.Path") as mock_path,
+        patch("uc_ball_hyp_generator.model_setup._logger") as mock_logger,
     ):
         mock_model = MockModel()
         mock_create_network.return_value = mock_model
@@ -272,9 +272,9 @@ def test_create_training_components() -> None:
     log_dir = "/tmp/test_logs"
 
     with (
-        patch("src.model_setup.optim.Adam") as mock_adam,
-        patch("src.model_setup.optim.lr_scheduler.ReduceLROnPlateau") as mock_scheduler,
-        patch("src.model_setup.SummaryWriter") as mock_writer,
+        patch("uc_ball_hyp_generator.model_setup.optim.Adam") as mock_adam,
+        patch("uc_ball_hyp_generator.model_setup.optim.lr_scheduler.ReduceLROnPlateau") as mock_scheduler,
+        patch("uc_ball_hyp_generator.model_setup.SummaryWriter") as mock_writer,
         patch("builtins.open", mock_open()) as mock_file,
     ):
         mock_optimizer = Mock()
@@ -313,7 +313,7 @@ def test_compile_existing_model_success() -> None:
     """Test compile_existing_model with successful compilation."""
     model = MockModel()
 
-    with patch("src.model_setup.torch.compile") as mock_compile, patch("src.model_setup._logger") as mock_logger:
+    with patch("uc_ball_hyp_generator.model_setup.torch.compile") as mock_compile, patch("uc_ball_hyp_generator.model_setup._logger") as mock_logger:
         mock_compiled = Mock()
         mock_compile.return_value = mock_compiled
 
@@ -329,8 +329,8 @@ def test_compile_existing_model_failure() -> None:
     model = MockModel()
 
     with (
-        patch("src.model_setup.torch.compile", side_effect=RuntimeError("Compilation failed")),
-        patch("src.model_setup._logger") as mock_logger,
+        patch("uc_ball_hyp_generator.model_setup.torch.compile", side_effect=RuntimeError("Compilation failed")),
+        patch("uc_ball_hyp_generator.model_setup._logger") as mock_logger,
     ):
         result = compile_existing_model(model)
 
@@ -342,7 +342,7 @@ def test_compile_existing_model_not_available() -> None:
     """Test compile_existing_model when torch.compile is not available."""
     model = MockModel()
 
-    with patch("src.model_setup.torch", spec_set=[]), patch("src.model_setup._logger") as mock_logger:
+    with patch("uc_ball_hyp_generator.model_setup.torch", spec_set=[]), patch("uc_ball_hyp_generator.model_setup._logger") as mock_logger:
         result = compile_existing_model(model)
 
         assert result is model  # Should return original model
@@ -353,7 +353,7 @@ def test_compile_existing_model_default_mode() -> None:
     """Test compile_existing_model with default compilation mode."""
     model = MockModel()
 
-    with patch("src.model_setup.torch.compile") as mock_compile, patch("src.model_setup._logger"):
+    with patch("uc_ball_hyp_generator.model_setup.torch.compile") as mock_compile, patch("uc_ball_hyp_generator.model_setup._logger"):
         mock_compiled = Mock()
         mock_compile.return_value = mock_compiled
 
@@ -363,5 +363,6 @@ def test_compile_existing_model_default_mode() -> None:
         assert result is mock_compiled
         result = compile_existing_model(model)
 
-        mock_compile.assert_called_once_with(model, mode="default", fullgraph=False)
+        assert mock_compile.call_count == 2
+        mock_compile.assert_called_with(model, mode="default", fullgraph=False)
         assert result is mock_compiled

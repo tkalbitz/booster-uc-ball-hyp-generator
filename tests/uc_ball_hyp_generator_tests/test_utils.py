@@ -70,13 +70,13 @@ def test_get_flops_macs_conversion() -> None:
     input_shape = (3, 32, 32)
 
     mock_macs = 1000
-    with patch("src.utils.profile_macs", return_value=mock_macs):
+    with patch("uc_ball_hyp_generator.utils.profile_macs", return_value=mock_macs):
         flops = get_flops(model, input_shape)
 
     assert flops == mock_macs * 2
 
 
-@patch("src.utils.profile_macs")
+@patch("uc_ball_hyp_generator.utils.profile_macs")
 def test_get_flops_no_grad_context(mock_profile_macs: Mock) -> None:
     """Test that FLOP calculation is done in no_grad context."""
     model = SimpleModel()
@@ -112,7 +112,7 @@ def test_get_flops_batch_size_one() -> None:
     model = SimpleModel()
     input_shape = (3, 32, 32)
 
-    with patch("src.utils.profile_macs") as mock_profile_macs:
+    with patch("uc_ball_hyp_generator.utils.profile_macs") as mock_profile_macs:
         mock_profile_macs.return_value = 1000
         get_flops(model, input_shape)
 

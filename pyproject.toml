@@ -17,12 +17,10 @@ dependencies = [
 ]
 
 [dependency-groups]
-dev = [
-    "mypy>=1.17.1",
-    "ruff>=0.12.10",
-    "ty>=0.0.1a19",
-    "pytest>=8.0.0",
-]
+dev = ["mypy>=1.17.1", "ruff>=0.12.10", "ty>=0.0.1a19", "pytest>=8.0.0"]
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
 
 [tool.ruff]
 line-length = 120
