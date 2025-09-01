@@ -66,7 +66,7 @@ class SEBlock(nn.Module):
 
 
 class NetworkV2(nn.Module):
-    def __init__(self, input_height: int, input_width: int) -> None:
+    def __init__(self, input_height: int, input_width: int, num_classes: int = 2) -> None:
         super().__init__()
         
         # Feature extraction backbone
@@ -98,26 +98,23 @@ class NetworkV2(nn.Module):
             )
         ])
         
-        # Calculate the size after all reductions dynamically
-        self._calculate_fc_input_size(input_height, input_width)
+        # Modern adaptive pooling - no manual size calculation needed!
+        self.global_pool = nn.AdaptiveAvgPool2d(1)  # Always outputs (B, C, 1, 1)
         
-        # Classification head
+        # Modern classification head - only need to know final channel count
+        final_channels = 21  # Output channels from last feature block
         self.classifier = nn.Sequential(
-            nn.Flatten(),
-            nn.Linear(self.fc_input_size, 32),
+            nn.Flatten(),  # (B, C, 1, 1) -> (B, C)
+            nn.Linear(final_channels, 64),  # Slightly larger intermediate layer
+            nn.BatchNorm1d(64),
+            nn.ReLU(),
+            nn.Dropout(0.2),  # Added dropout for better generalization
+            nn.Linear(64, 32),
             nn.BatchNorm1d(32),
             nn.ReLU(),
-            nn.Linear(32, 2),
+            nn.Linear(32, num_classes),
             nn.Tanh()
         )
-    
-    def _calculate_fc_input_size(self, input_height: int, input_width: int) -> None:
-        """Dynamically calculate fully connected layer input size."""
-        # Each big_little_reduction halves the spatial dimensions
-        final_h = input_height // (2 ** len(self.feature_blocks))
-        final_w = input_width // (2 ** len(self.feature_blocks))
-        final_channels = 21  # Final output channels from last feature block
-        self.fc_input_size = final_channels * final_h * final_w
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = self.backbone(x)
@@ -125,7 +122,9 @@ class NetworkV2(nn.Module):
         for block in self.feature_blocks:
             x = block(x)
         
-        x = self.classifier(x)
+        # Adaptive pooling works for ANY spatial size
+        x = self.global_pool(x)  # (B, 21, H, W) -> (B, 21, 1, 1)
+        x = self.classifier(x)   # (B, 21, 1, 1) -> (B, num_classes)
         
         return x
 

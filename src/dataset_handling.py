@@ -19,7 +19,7 @@ def downsample_by_averaging(img: npt.NDArray[np.float32], scale: tuple[int, int]
 
 
 def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[torch.Tensor, torch.Tensor]:
-    """Load and process an image with its label using torchvision transforms."""
+    """Load and process an image with its label using torchvision transforms, keeping CHW format."""
     # Create transforms pipeline for efficient preprocessing
     transform = transforms.Compose(
         [
@@ -29,8 +29,7 @@ def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[torch.Tenso
     )
 
     pil_image = Image.open(path).convert("RGB")
-    image_tensor = transform(pil_image)  # Already in CHW format
-    image = image_tensor.permute(1, 2, 0)  # CHW to HWC for processing
+    image_tensor = transform(pil_image)  # Keep in CHW format - no permutation needed!
 
     label_tensor = torch.tensor(label, dtype=torch.float32)
 
@@ -43,7 +42,7 @@ def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[torch.Tenso
 
     final_label = torch.tensor([center_x, center_y, d])
 
-    return image, final_label
+    return image_tensor, final_label
 
 
 # Set random seed for reproducibility
@@ -52,7 +51,7 @@ np.random.seed(1)
 
 
 def crop_image_by_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Crop image to patch containing the ball center."""
+    """Crop image to patch containing the ball center, working with CHW format."""
     cx = label[0]
     cy = label[1]
     d = label[2]
@@ -68,10 +67,11 @@ def crop_image_by_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch
     end_x = int(start_x + patch_width)
     end_y = int(start_y + patch_height)
 
-    image2 = image[start_y:end_y, start_x:end_x, :]
-    label = torch.tensor([cx - float(start_x), cy - float(start_y), d])
+    # Work with CHW format: image shape is (C, H, W)
+    cropped_image = image[:, start_y:end_y, start_x:end_x]
+    adjusted_label = torch.tensor([cx - float(start_x), cy - float(start_y), d])
 
-    return image2, label
+    return cropped_image, adjusted_label
 
 
 def _calculate_random_crop_bounds(cx: torch.Tensor, cy: torch.Tensor, d: torch.Tensor) -> tuple[int, int]:
@@ -111,13 +111,14 @@ def _adjust_crop_bounds(start_x: int, start_y: int) -> tuple[int, int, int, int]
 
 
 def crop_image_random_with_ball(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Randomly crop image patch ensuring ball remains visible."""
+    """Randomly crop image patch ensuring ball remains visible, working with CHW format."""
     cx, cy, d = label[0], label[1], label[2]
 
     start_x, start_y = _calculate_random_crop_bounds(cx, cy, d)
     start_x, start_y, end_x, end_y = _adjust_crop_bounds(start_x, start_y)
 
-    cropped_image = image[start_y:end_y, start_x:end_x, :]
+    # Work with CHW format: image shape is (C, H, W)
+    cropped_image = image[:, start_y:end_y, start_x:end_x]
     adjusted_label = torch.tensor([cx - float(start_x), cy - float(start_y), d])
 
     return cropped_image, adjusted_label
@@ -157,30 +158,38 @@ def patchify_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tens
 
 
 def train_augment_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Apply training augmentations to image and label."""
+    """Apply training augmentations to image and label, working with CHW format."""
     r = torch.rand(1).item()
 
     if r < 0.5:
-        # Horizontal flip
-        image = torch.flip(image, dims=[1])
+        # Horizontal flip - flip along width dimension (dim=2 for CHW)
+        image = torch.flip(image, dims=[2])
         label = torch.tensor([patch_width - label[0], label[1], label[2]])
 
     # Random brightness adjustment
     brightness_factor = 1.0 + (torch.rand(1).item() - 0.5) * 0.3  # ±0.15 range
     image = torch.clamp(image * brightness_factor, 0, 1)
 
-    a = rgb2yuv(image * 255.0)
+    # Convert to YUV - need HWC format temporarily for color conversion
+    image_hwc = image.permute(1, 2, 0)  # CHW to HWC for color conversion
+    yuv_hwc = rgb2yuv(image_hwc * 255.0)
+    yuv_chw = yuv_hwc.permute(2, 0, 1)  # Back to CHW
 
-    return a, label
+    return yuv_chw, label
 
 
 def test_augment_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Apply test augmentations (RGB to YUV conversion only)."""
-    return rgb2yuv(image * 255.0), label
+    """Apply test augmentations (RGB to YUV conversion only), working with CHW format."""
+    # Convert to YUV - need HWC format temporarily for color conversion  
+    image_hwc = image.permute(1, 2, 0)  # CHW to HWC for color conversion
+    yuv_hwc = rgb2yuv(image_hwc * 255.0)
+    yuv_chw = yuv_hwc.permute(2, 0, 1)  # Back to CHW
+    
+    return yuv_chw, label
 
 
 def final_adjustments(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-    """Apply final scaling adjustments."""
+    """Apply final scaling adjustments, keeping CHW format."""
     x = scale_x(label[0] - patch_width / 2)
     y = scale_y(label[1] - patch_height / 2)
 
@@ -223,9 +232,7 @@ class BallDataset(Dataset):
 
         image, label_tensor = final_adjustments(image, label_tensor)
 
-        # Convert to CHW format for PyTorch
-        image = image.permute(2, 0, 1)
-
+        # Image is already in CHW format - no permutation needed!
         return image, label_tensor
 
 
@@ -298,95 +305,73 @@ def create_dataset_image_based(
     )
 
 
-class ColorSpaceConverter:
-    """Efficient color space conversion with cached transformation matrices."""
+# Pre-computed transformation matrices as constants
+RGB_TO_YUV_MATRIX = torch.tensor([
+    [0.299, -0.169, 0.498], 
+    [0.587, -0.331, -0.419], 
+    [0.114, 0.499, -0.0813]
+], dtype=torch.float32)
 
-    _rgb_to_yuv_cache: dict[str, torch.Tensor] = {}
-    _yuv_to_rgb_cache: dict[str, torch.Tensor] = {}
-    _yuv_bias_cache: dict[str, torch.Tensor] = {}
-    _rgb_bias_cache: dict[str, torch.Tensor] = {}
+YUV_TO_RGB_MATRIX = torch.tensor([
+    [1.0, 1.0, 1.0],
+    [-0.000007154783816076815, -0.3441331386566162, 1.7720025777816772],
+    [1.4019975662231445, -0.7141380310058594, 0.00001542569043522235],
+], dtype=torch.float32)
 
-    @classmethod
-    def _get_rgb_to_yuv_matrix(cls, device: torch.device) -> torch.Tensor:
-        """Get cached RGB to YUV transformation matrix."""
-        device_key = str(device)
-        if device_key not in cls._rgb_to_yuv_cache:
-            cls._rgb_to_yuv_cache[device_key] = torch.tensor(
-                [[0.299, -0.169, 0.498], [0.587, -0.331, -0.419], [0.114, 0.499, -0.0813]],
-                dtype=torch.float32,
-                device=device,
-            )
-        return cls._rgb_to_yuv_cache[device_key]
-
-    @classmethod
-    def _get_yuv_to_rgb_matrix(cls, device: torch.device) -> torch.Tensor:
-        """Get cached YUV to RGB transformation matrix."""
-        device_key = str(device)
-        if device_key not in cls._yuv_to_rgb_cache:
-            cls._yuv_to_rgb_cache[device_key] = torch.tensor(
-                [
-                    [1.0, 1.0, 1.0],
-                    [-0.000007154783816076815, -0.3441331386566162, 1.7720025777816772],
-                    [1.4019975662231445, -0.7141380310058594, 0.00001542569043522235],
-                ],
-                dtype=torch.float32,
-                device=device,
-            )
-        return cls._yuv_to_rgb_cache[device_key]
-
-    @classmethod
-    def _get_yuv_bias(cls, device: torch.device) -> torch.Tensor:
-        """Get cached YUV bias tensor."""
-        device_key = str(device)
-        if device_key not in cls._yuv_bias_cache:
-            cls._yuv_bias_cache[device_key] = torch.tensor([0, 128, 128], device=device)
-        return cls._yuv_bias_cache[device_key]
-
-    @classmethod
-    def _get_rgb_bias(cls, device: torch.device) -> torch.Tensor:
-        """Get cached RGB bias tensor."""
-        device_key = str(device)
-        if device_key not in cls._rgb_bias_cache:
-            cls._rgb_bias_cache[device_key] = torch.tensor(
-                [-179.45477266423404, 135.45870971679688, -226.8183044444304], device=device
-            )
-        return cls._rgb_bias_cache[device_key]
+YUV_BIAS = torch.tensor([0, 128, 128], dtype=torch.float32)
+RGB_BIAS = torch.tensor([-179.45477266423404, 135.45870971679688, -226.8183044444304], dtype=torch.float32)
 
 
-def rgb2yuv(rgb: torch.Tensor) -> torch.Tensor:
-    """Convert RGB to YUV color space, supporting batch processing."""
+@torch.jit.script
+def rgb2yuv_optimized(rgb: torch.Tensor) -> torch.Tensor:
+    """Optimized RGB to YUV color space conversion using JIT compilation."""
     device = rgb.device
-    m = ColorSpaceConverter._get_rgb_to_yuv_matrix(device)
-
-    # Handle both single images and batches of images
-    original_shape = rgb.shape
-
-    # Flatten spatial dimensions while preserving batch dimension if present
-    if len(original_shape) == 4:  # Batch of images: (batch, H, W, 3)
-        rgb_flat = rgb.view(-1, 3)
+    dtype = rgb.dtype
+    
+    # Move matrices to device if needed (cached by JIT)
+    transform_matrix = RGB_TO_YUV_MATRIX.to(device=device, dtype=dtype)
+    bias = YUV_BIAS.to(device=device, dtype=dtype)
+    
+    # More efficient tensor operations - avoid unnecessary reshaping
+    # Use einsum for better performance on matrix multiplication
+    if len(rgb.shape) == 4:  # Batch of images: (N, H, W, 3)
+        yuv = torch.einsum('nhwc,kc->nhwk', rgb, transform_matrix)
     else:  # Single image: (H, W, 3)
-        rgb_flat = rgb.view(-1, 3)
-
-    yuv_flat = torch.mm(rgb_flat, m.t())
-    yuv = yuv_flat.view(original_shape)
-    yuv += ColorSpaceConverter._get_yuv_bias(device)
-
+        yuv = torch.einsum('hwc,kc->hwk', rgb, transform_matrix)
+    
+    yuv = yuv + bias
     return yuv
 
 
-def yuv2rgb(yuv: torch.Tensor) -> torch.Tensor:
-    """Convert YUV to RGB color space."""
+@torch.jit.script  
+def yuv2rgb_optimized(yuv: torch.Tensor) -> torch.Tensor:
+    """Optimized YUV to RGB color space conversion using JIT compilation."""
     device = yuv.device
-    m = ColorSpaceConverter._get_yuv_to_rgb_matrix(device)
-
-    # Reshape for matrix multiplication
-    original_shape = yuv.shape
-    yuv_flat = yuv.view(-1, 3)
-    rgb_flat = torch.mm(yuv_flat, m.t())
-    rgb = rgb_flat.view(original_shape)
-    rgb += ColorSpaceConverter._get_rgb_bias(device)
-
+    dtype = yuv.dtype
+    
+    # Move matrices to device if needed (cached by JIT)
+    transform_matrix = YUV_TO_RGB_MATRIX.to(device=device, dtype=dtype)
+    bias = RGB_BIAS.to(device=device, dtype=dtype)
+    
+    # More efficient tensor operations
+    if len(yuv.shape) == 4:  # Batch of images: (N, H, W, 3)
+        rgb = torch.einsum('nhwc,kc->nhwk', yuv, transform_matrix)
+    else:  # Single image: (H, W, 3)
+        rgb = torch.einsum('hwc,kc->hwk', yuv, transform_matrix)
+    
+    rgb = rgb + bias
     return rgb
+
+
+# Backward compatibility aliases - gradually migrate to optimized versions
+def rgb2yuv(rgb: torch.Tensor) -> torch.Tensor:
+    """Convert RGB to YUV color space (backward compatibility wrapper)."""
+    return rgb2yuv_optimized(rgb)
+
+
+def yuv2rgb(yuv: torch.Tensor) -> torch.Tensor:
+    """Convert YUV to RGB color space (backward compatibility wrapper)."""
+    return yuv2rgb_optimized(yuv)
 
 
 def show_dataset(ds: DataLoader) -> None:
