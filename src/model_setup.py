@@ -35,27 +35,45 @@ class DistanceLoss(nn.Module):
         return x + torch.nn.functional.softplus(-2. * x) - torch.as_tensor(self.log_two)
     
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
-        # Vectorized unscaling operations avoiding tensor creation
-        y_t_x = torch.as_tensor(unscale_x(y_true[:, 0]))
-        y_t_y = torch.as_tensor(unscale_y(y_true[:, 1]))
-        y_p_x = torch.as_tensor(unscale_x(y_pred[:, 0]))
-        y_p_y = torch.as_tensor(unscale_y(y_pred[:, 1]))
+        # Vectorized unscaling operations - ensure tensor output
+        y_t_x = unscale_x(y_true[:, 0])
+        y_t_y = unscale_y(y_true[:, 1]) 
+        y_p_x = unscale_x(y_pred[:, 0])
+        y_p_y = unscale_y(y_pred[:, 1])
         
-        # Stack operations
-        y_t = torch.stack([y_t_x, y_t_y], dim=1)
-        y_p = torch.stack([y_p_x, y_p_y], dim=1)
+        # Convert to tensors if they aren't already
+        if not isinstance(y_t_x, torch.Tensor):
+            y_t_x = torch.tensor(y_t_x, device=y_true.device, dtype=y_true.dtype)
+        if not isinstance(y_t_y, torch.Tensor):
+            y_t_y = torch.tensor(y_t_y, device=y_true.device, dtype=y_true.dtype)
+        if not isinstance(y_p_x, torch.Tensor):
+            y_p_x = torch.tensor(y_p_x, device=y_pred.device, dtype=y_pred.dtype)
+        if not isinstance(y_p_y, torch.Tensor):
+            y_p_y = torch.tensor(y_p_y, device=y_pred.device, dtype=y_pred.dtype)
+            
+        y_t_xy = torch.stack([y_t_x, y_t_y], dim=1)
+        y_p_xy = torch.stack([y_p_x, y_p_y], dim=1)
         
-        r = self._logcosh(y_p - y_t)
+        r = self._logcosh(y_p_xy - y_t_xy)
         e = torch.exp(self.confidence_scale / y_true[:, 2])
         r = r * e.unsqueeze(1)
         return torch.mean(r)
 
 
-def create_model() -> tuple[torch.nn.Module, str, str]:
+def create_model(compile_model: bool = True) -> tuple[torch.nn.Module, str, str]:
     """Create and initialize the model."""
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = models.create_network_v2(patch_height, patch_width)
     model = model.to(device)
+    
+    # Apply PyTorch 2.0 compilation for better performance
+    if compile_model and hasattr(torch, 'compile'):
+        try:
+            model = torch.compile(model, mode='default', fullgraph=False)  # type: ignore[assignment]
+            _logger.info("Model compiled with torch.compile for better performance")
+        except Exception as e:
+            _logger.warning("Failed to compile model: %s", e)
+            _logger.warning("Continuing with uncompiled model")
     
     if len(sys.argv) > 1:
         if sys.argv[1] == '--test':
@@ -99,3 +117,27 @@ def create_training_components(model: torch.nn.Module, model_dir: str, log_dir: 
     csv_file.write('epoch,loss,val_loss,accuracy,val_accuracy,found_balls,val_found_balls\\n')
     
     return optimizer, criterion, scheduler, writer, csv_file
+
+
+def compile_existing_model(model: torch.nn.Module, mode: str = 'default') -> torch.nn.Module:
+    """Compile an existing model for better performance.
+    
+    Args:
+        model: The model to compile
+        mode: Compilation mode ('default', 'reduce-overhead', 'max-autotune')
+        
+    Returns:
+        Compiled model or original model if compilation fails
+    """
+    if hasattr(torch, 'compile'):
+        try:
+            compiled_model = torch.compile(model, mode=mode, fullgraph=False)  # type: ignore[assignment]
+            _logger.info("Model compiled with torch.compile (mode: %s)", mode)
+            return compiled_model  # type: ignore[return-value]
+        except Exception as e:
+            _logger.warning("Failed to compile model: %s", e)
+            _logger.warning("Returning uncompiled model")
+            return model
+    else:
+        _logger.warning("torch.compile not available, returning uncompiled model")
+        return model

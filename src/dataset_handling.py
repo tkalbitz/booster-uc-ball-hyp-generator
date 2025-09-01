@@ -242,7 +242,12 @@ def create_dataset(
     """Create PyTorch DataLoader for the dataset."""
     dataset = BallDataset(images, labels, trainset)
     return DataLoader(
-        dataset, batch_size=batch_size, shuffle=trainset, num_workers=4 if trainset else 2, pin_memory=True
+        dataset, 
+        batch_size=batch_size, 
+        shuffle=trainset, 
+        num_workers=2,
+        pin_memory=True,
+        persistent_workers=True if len(images) > 100 else False
     )
 
 
@@ -301,7 +306,13 @@ def create_dataset_image_based(
     """Create PyTorch DataLoader for patch-based dataset."""
     dataset = BallPatchDataset(images, labels)
     return DataLoader(
-        dataset, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True, collate_fn=patch_collate_fn
+        dataset, 
+        batch_size=batch_size, 
+        shuffle=False, 
+        num_workers=2, 
+        pin_memory=True, 
+        collate_fn=patch_collate_fn,
+        persistent_workers=True if len(images) > 100 else False
     )
 
 

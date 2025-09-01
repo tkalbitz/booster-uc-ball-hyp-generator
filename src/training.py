@@ -12,7 +12,6 @@ from logger import get_logger
 _logger = get_logger(__name__)
 
 # Global variables that should be passed as parameters in the future
-device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 train_steps_per_epoch: int = 0  # Will be set by the main script
 test_steps_per_epoch: int = 0   # Will be set by the main script
 
@@ -25,7 +24,7 @@ def calculate_accuracy(y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tens
     return accuracy
 
 
-def train_epoch(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, optimizer: torch.optim.Optimizer, criterion: torch.nn.Module, train_metric: FoundBallMetric) -> tuple[float, float, float]:
+def train_epoch(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, optimizer: torch.optim.Optimizer, criterion: torch.nn.Module, train_metric: FoundBallMetric, device: torch.device) -> tuple[float, float, float]:
     """Run a single training epoch and return metrics."""
     model.train()
     train_loss = 0.0
@@ -55,7 +54,7 @@ def train_epoch(model: torch.nn.Module, train_loader: torch.utils.data.DataLoade
     return train_loss, train_acc, train_found_balls
 
 
-def validate_epoch(model: torch.nn.Module, test_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, val_metric: FoundBallMetric) -> tuple[float, float, float]:
+def validate_epoch(model: torch.nn.Module, test_loader: torch.utils.data.DataLoader, criterion: torch.nn.Module, val_metric: FoundBallMetric, device: torch.device) -> tuple[float, float, float]:
     """Run a single validation epoch and return metrics."""
     model.eval()
     val_loss = 0.0
@@ -120,7 +119,7 @@ def save_model_checkpoints(model: torch.nn.Module, model_dir: str, epoch: int, v
     return best_val_loss, best_val_found_balls, patience_counter
 
 
-def run_training_loop(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, test_loader: torch.utils.data.DataLoader, optimizer: torch.optim.Optimizer, criterion: torch.nn.Module, scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau, writer: SummaryWriter, csv_file: TextIO, model_dir: str, epochs: int = 10000) -> None:
+def run_training_loop(model: torch.nn.Module, train_loader: torch.utils.data.DataLoader, test_loader: torch.utils.data.DataLoader, optimizer: torch.optim.Optimizer, criterion: torch.nn.Module, scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau, writer: SummaryWriter, csv_file: TextIO, model_dir: str, device: torch.device, epochs: int = 10000) -> None:
     """Main training loop for the model."""
     best_val_loss = float('inf')
     best_val_found_balls = 0.0
@@ -131,8 +130,8 @@ def run_training_loop(model: torch.nn.Module, train_loader: torch.utils.data.Dat
     val_metric = FoundBallMetric()
     
     for epoch in range(epochs):
-        train_loss, train_acc, train_found_balls = train_epoch(model, train_loader, optimizer, criterion, train_metric)
-        val_loss, val_acc, val_found_balls = validate_epoch(model, test_loader, criterion, val_metric)
+        train_loss, train_acc, train_found_balls = train_epoch(model, train_loader, optimizer, criterion, train_metric, device)
+        val_loss, val_acc, val_found_balls = validate_epoch(model, test_loader, criterion, val_metric, device)
         
         log_epoch_metrics(epoch, epochs, train_loss, train_acc, train_found_balls, val_loss, val_acc, val_found_balls, writer, csv_file)
         

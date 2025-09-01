@@ -16,12 +16,13 @@ from dataset_handling import create_dataset
 from model_evaluation import evaluate_model_accuracy, EvaluationMetrics
 
 
-def load_pytorch_model(model_path: str, device: str = "cuda") -> torch.nn.Module:
+def load_pytorch_model(model_path: str, device: str = "cuda", compile_model: bool = True) -> torch.nn.Module:
     """Load original PyTorch model.
     
     Args:
         model_path: Path to PyTorch model weights
         device: Device to load model on
+        compile_model: Whether to compile the model for better performance
         
     Returns:
         Loaded PyTorch model
@@ -31,6 +32,15 @@ def load_pytorch_model(model_path: str, device: str = "cuda") -> torch.nn.Module
     model.load_state_dict(torch.load(model_path, map_location=torch_device))
     model.to(torch_device)
     model.eval()
+    
+    # Apply PyTorch 2.0 compilation for better inference performance
+    if compile_model and hasattr(torch, 'compile'):
+        try:
+            model = torch.compile(model, mode='max-autotune', fullgraph=False)  # type: ignore[assignment]
+            print("   ✓ Model compiled for better inference performance")
+        except Exception:
+            print("   ! Failed to compile model, using uncompiled version")
+    
     return model
 
 
@@ -53,23 +63,26 @@ def compare_model_precisions(
     print("=== Precision Accuracy Comparison ===")
     print(f"Evaluating on {num_samples} samples...\n")
     
-    try:
-        png_files = {f.name: str(f) for f in image_dir.glob("**/*.png")}
-        test_img, test_labels, _ = load_csv_collection(testset_csv_collection, png_files)
-        
-        data_loader: Union[DataLoader, Iterator[tuple[torch.Tensor, torch.Tensor]]] = create_dataset(test_img, test_labels, 1, trainset=False)
-        
-    except Exception as e:
-        print(f"Warning: Could not load real test data: {e}")
-        print("Using synthetic data for comparison...")
-        
-        def synthetic_data_loader() -> Iterator[tuple[torch.Tensor, torch.Tensor]]:
-            for _ in range(num_samples):
-                images = torch.randn(1, 3, patch_height, patch_width)
-                labels = torch.tensor([[0.1, 0.1, 10.0]])  # Synthetic label
-                yield images, labels
-        
-        data_loader = synthetic_data_loader()
+    def create_data_loader() -> Union[DataLoader, Iterator[tuple[torch.Tensor, torch.Tensor]]]:
+        """Create data loader once and reuse for all model evaluations."""
+        try:
+            png_files = {f.name: str(f) for f in image_dir.glob("**/*.png")}
+            test_img, test_labels, _ = load_csv_collection(testset_csv_collection, png_files)
+            return create_dataset(test_img, test_labels, 1, trainset=False)
+        except Exception as e:
+            print(f"Warning: Could not load real test data: {e}")
+            print("Using synthetic data for comparison...")
+            
+            def synthetic_data_loader() -> Iterator[tuple[torch.Tensor, torch.Tensor]]:
+                for _ in range(num_samples):
+                    images = torch.randn(1, 3, patch_height, patch_width)
+                    labels = torch.tensor([[0.1, 0.1, 10.0]])  # Synthetic label
+                    yield images, labels
+            
+            return synthetic_data_loader()
+    
+    # Create data loader once for reuse
+    base_data_loader = create_data_loader()
     
     results: dict[str, EvaluationMetrics] = {}
     
@@ -79,7 +92,7 @@ def compare_model_precisions(
     try:
         pytorch_model = load_pytorch_model(pytorch_model_path, device.type)
         results["pytorch_fp32"] = evaluate_model_accuracy(
-            pytorch_model, data_loader, "pytorch", device, num_samples
+            pytorch_model, base_data_loader, "pytorch", device, num_samples
         )
         print(f"   ✓ Accuracy: {results['pytorch_fp32'].accuracy:.4f}")
         print(f"   ✓ Avg time: {results['pytorch_fp32'].avg_inference_time_ms:.2f} ms")
@@ -93,7 +106,8 @@ def compare_model_precisions(
         try:
             fp16_model = TensorRTInference(fp16_model_path)
             
-            data_loader_fp16 = create_dataset(test_img, test_labels, 1, trainset=False) if 'test_img' in locals() else synthetic_data_loader()
+            # Reuse the same data loader type
+            data_loader_fp16 = create_data_loader()
             results["tensorrt_fp16"] = evaluate_model_accuracy(
                 fp16_model, data_loader_fp16, "tensorrt", device, num_samples
             )
@@ -111,7 +125,8 @@ def compare_model_precisions(
         try:
             int8_model = TensorRTInference(int8_model_path)
             
-            data_loader_int8 = create_dataset(test_img, test_labels, 1, trainset=False) if 'test_img' in locals() else synthetic_data_loader()
+            # Reuse the same data loader type
+            data_loader_int8 = create_data_loader()
             results["tensorrt_int8"] = evaluate_model_accuracy(
                 int8_model, data_loader_int8, "tensorrt", device, num_samples
             )
