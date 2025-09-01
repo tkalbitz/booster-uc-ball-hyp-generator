@@ -6,13 +6,13 @@ from pathlib import Path
 from typing import Iterator, Union
 
 import torch
-from inference_tensorrt import TensorRTInference
 from torch.utils.data import DataLoader
 
 import uc_ball_hyp_generator.models as models
 from uc_ball_hyp_generator.config import image_dir, patch_height, patch_width, testset_csv_collection
 from uc_ball_hyp_generator.csv_label_reader import load_csv_collection
 from uc_ball_hyp_generator.dataset_handling import create_dataset
+from uc_ball_hyp_generator.inference_tensorrt import TensorRTInference
 from uc_ball_hyp_generator.model_evaluation import EvaluationMetrics, evaluate_model_accuracy
 
 
@@ -176,6 +176,8 @@ def main() -> None:
     )
 
 
+if __name__ == "__main__":
+    main()
 if __name__ == "__main__":
     main()
 if __name__ == "__main__":
