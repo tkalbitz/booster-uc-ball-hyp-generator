@@ -33,7 +33,7 @@ def test_distance_loss_initialization() -> None:
 
     assert hasattr(loss, "log_two")
     assert hasattr(loss, "confidence_scale")
-    assert loss.confidence_scale.item() == 3.0
+    assert isinstance(loss.confidence_scale, torch.Tensor) and loss.confidence_scale.item() == 3.0
 
 
 def test_distance_loss_logcosh() -> None:

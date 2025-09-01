@@ -175,7 +175,7 @@ def test_read_csv_label_empty_file() -> None:
     csv_content = ""
 
     csv_file = create_temp_csv(csv_content)
-    img_files = {}
+    img_files: dict[str, str] = {}
 
     try:
         (imgs, labels, lines), skipped = read_csv_label(csv_file, img_files)
