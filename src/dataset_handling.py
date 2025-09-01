@@ -118,27 +118,35 @@ def crop_image_random_with_ball(image: torch.Tensor, label: torch.Tensor) -> tup
     return cropped_image, adjusted_label
 
 
-def patchify_image(image: torch.Tensor, label: torch.Tensor) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
-    """Split image into patches with adjusted labels."""
-    cx = label[0]
-    cy = label[1]
-    d = label[2]
-
-    patches = []
-    labels = []
+def patchify_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+    """Split image into patches with adjusted labels using vectorized operations."""
+    cx, cy, d = label[0], label[1], label[2]
 
     patches_y = image.shape[0] // patch_height
     patches_x = image.shape[1] // patch_width
-
-    for y in range(patches_y):
-        for x in range(patches_x):
-            ys = y * patch_height
-            ye = ys + patch_height
-            xs = x * patch_width
-            xe = xs + patch_width
-
-            patches.append(image[ys:ye, xs:xe, :])
-            labels.append(torch.tensor([cx - float(xs), cy - float(ys), d]))
+    
+    # Use unfold to extract all patches in a vectorized way
+    # unfold(dimension, size, step) extracts sliding windows
+    patches = image.unfold(0, patch_height, patch_height).unfold(1, patch_width, patch_width)
+    # Reshape from (patches_y, patches_x, channels, patch_height, patch_width) 
+    # to (num_patches, patch_height, patch_width, channels)
+    patches = patches.permute(0, 1, 3, 4, 2).contiguous().view(-1, patch_height, patch_width, image.shape[2])
+    
+    # Create coordinate grids for vectorized label computation
+    y_coords = torch.arange(patches_y, dtype=torch.float32) * patch_height
+    x_coords = torch.arange(patches_x, dtype=torch.float32) * patch_width
+    
+    # Create meshgrid and flatten to match patch order
+    yy, xx = torch.meshgrid(y_coords, x_coords, indexing='ij')
+    xx_flat = xx.flatten()
+    yy_flat = yy.flatten()
+    
+    # Vectorized label adjustment
+    adjusted_cx = cx - xx_flat
+    adjusted_cy = cy - yy_flat
+    d_repeated = d.expand(len(xx_flat))
+    
+    labels = torch.stack([adjusted_cx, adjusted_cy, d_repeated], dim=1)
 
     return patches, labels
 
@@ -174,15 +182,14 @@ def final_adjustments(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.T
     return image / 255.0, torch.tensor([x, y, label[2]])
 
 
-def final_adjustments_patches(image: torch.Tensor, label: list[torch.Tensor]) -> tuple[torch.Tensor, torch.Tensor]:
+def final_adjustments_patches(image: torch.Tensor, labels: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply final scaling adjustments for patch-based processing."""
-    label_tensor = torch.stack(label)  # Convert list to tensor
-    x = scale_x(label_tensor[:, 0] - patch_width / 2)
-    y = scale_y(label_tensor[:, 1] - patch_height / 2)
+    x = scale_x(labels[:, 0] - patch_width / 2)
+    y = scale_y(labels[:, 1] - patch_height / 2)
 
     x_tensor = torch.as_tensor(x)
     y_tensor = torch.as_tensor(y)
-    return image / 255.0, torch.stack([x_tensor, y_tensor, label_tensor[:, 2]], dim=1)
+    return image / 255.0, torch.stack([x_tensor, y_tensor, labels[:, 2]], dim=1)
 
 
 class BallDataset(Dataset):
@@ -244,23 +251,20 @@ class BallPatchDataset(Dataset):
         image, label_tensor = load_image(image_path, label_tuple)
         patches, patch_labels = patchify_image(image, label_tensor)
 
-        # Apply augmentations to all patches
-        augmented_patches = []
-        augmented_labels = []
+        # Apply augmentations to all patches using vectorized operations
+        # patches shape: (num_patches, patch_height, patch_width, channels)
+        
+        # Convert all patches to YUV color space in batch
+        patches_scaled = patches * 255.0
+        augmented_patches = rgb2yuv(patches_scaled)
 
-        for patch, patch_label in zip(patches, patch_labels):
-            patch, patch_label = test_augment_image(patch, patch_label)
-            augmented_patches.append(patch)
-            augmented_labels.append(patch_label)
-
-        # Stack patches and apply final adjustments
-        stacked_patches = torch.stack(augmented_patches)
-        _, final_labels = final_adjustments_patches(stacked_patches[0], augmented_labels)
+        # Apply final adjustments
+        _, final_labels = final_adjustments_patches(augmented_patches[0], patch_labels)
 
         # Convert patches to CHW format
-        stacked_patches = stacked_patches.permute(0, 3, 1, 2)  # NHWC to NCHW
+        augmented_patches = augmented_patches.permute(0, 3, 1, 2)  # NHWC to NCHW
 
-        return stacked_patches, final_labels
+        return augmented_patches, final_labels
 
 
 def create_dataset_image_based(
@@ -272,12 +276,18 @@ def create_dataset_image_based(
 
 
 def rgb2yuv(rgb: torch.Tensor) -> torch.Tensor:
-    """Convert RGB to YUV color space."""
+    """Convert RGB to YUV color space, supporting batch processing."""
     m = torch.tensor([[0.299, -0.169, 0.498], [0.587, -0.331, -0.419], [0.114, 0.499, -0.0813]], dtype=torch.float32)
 
-    # Reshape for matrix multiplication: (H, W, 3) -> (H*W, 3)
+    # Handle both single images and batches of images
     original_shape = rgb.shape
-    rgb_flat = rgb.view(-1, 3)
+    
+    # Flatten spatial dimensions while preserving batch dimension if present
+    if len(original_shape) == 4:  # Batch of images: (batch, H, W, 3)
+        rgb_flat = rgb.view(-1, 3)
+    else:  # Single image: (H, W, 3)
+        rgb_flat = rgb.view(-1, 3)
+    
     yuv_flat = torch.mm(rgb_flat, m.t())
     yuv = yuv_flat.view(original_shape)
     yuv += torch.tensor([0, 128, 128])

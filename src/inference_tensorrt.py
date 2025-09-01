@@ -5,7 +5,6 @@ import sys
 import time
 from pathlib import Path
 
-import torch
 import numpy as np
 from PIL import Image
 import tensorrt as trt  # type: ignore[import-untyped]
@@ -70,7 +69,7 @@ class TensorRTInference:
 
 
 def load_and_preprocess_image(image_path: str) -> np.ndarray:
-    """Load and preprocess image for inference.
+    """Load and preprocess image for inference using PyTorch operations.
     
     Args:
         image_path: Path to input image
@@ -78,21 +77,16 @@ def load_and_preprocess_image(image_path: str) -> np.ndarray:
     Returns:
         Preprocessed image as numpy array
     """
-    image = Image.open(image_path)
+    import torchvision.transforms as transforms  # type: ignore[import-untyped]
     
-    if image.size != (patch_width, patch_height):
-        image = image.resize((patch_width, patch_height), Image.Resampling.LANCZOS)  # type: ignore[assignment]
+    # Use torchvision transforms for efficient preprocessing
+    transform = transforms.Compose([
+        transforms.Resize((patch_height, patch_width)),
+        transforms.ToTensor(),  # Converts PIL to tensor and normalizes to [0,1]
+    ])
     
-    image_array = np.array(image)
-    
-    if len(image_array.shape) == 2:
-        image_array = np.stack([image_array] * 3, axis=-1)
-    elif image_array.shape[2] == 4:
-        image_array = image_array[:, :, :3]
-    
-    image_array = image_array.astype(np.float32) / 255.0
-    
-    image_tensor = torch.from_numpy(image_array).permute(2, 0, 1).unsqueeze(0)
+    image = Image.open(image_path).convert('RGB')  # Ensure RGB format
+    image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
     
     return image_tensor.numpy()
 
