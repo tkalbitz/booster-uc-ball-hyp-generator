@@ -44,9 +44,11 @@ def main() -> None:
     model, model_dir, log_dir = create_model()
     optimizer, criterion, scheduler, writer, csv_file = create_training_components(model, model_dir, log_dir)
 
-    run_training_loop(model, train_ds, test_ds, optimizer, criterion, scheduler, writer, csv_file, model_dir)
+    run_training_loop(model, train_ds, test_ds, optimizer, criterion, scheduler, writer, csv_file, model_dir, device)
 
 
+if __name__ == "__main__":
+    main()
 if __name__ == "__main__":
     main()
 if __name__ == "__main__":

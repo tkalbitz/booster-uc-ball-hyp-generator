@@ -4,10 +4,10 @@ import os
 from typing import TextIO
 
 import torch
-from logger import get_logger
 from torch.utils.tensorboard import SummaryWriter
 
 from uc_ball_hyp_generator.custom_metrics import FoundBallMetric
+from uc_ball_hyp_generator.logger import get_logger
 
 _logger = get_logger(__name__)
 
