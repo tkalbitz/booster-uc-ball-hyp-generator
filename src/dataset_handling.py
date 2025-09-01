@@ -1,7 +1,7 @@
 import numpy as np
 import numpy.typing as npt
 import torch
-import torch.nn.functional as F
+import torchvision.transforms as transforms  # type: ignore[import-untyped]
 from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
 from PIL import Image
@@ -19,13 +19,18 @@ def downsample_by_averaging(img: npt.NDArray[np.float32], scale: tuple[int, int]
 
 
 def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[torch.Tensor, torch.Tensor]:
-    """Load and process an image with its label."""
-    pil_image = Image.open(path).convert("RGB")
-    image_array = np.array(pil_image).astype(np.float32) / 255.0
+    """Load and process an image with its label using torchvision transforms."""
+    # Create transforms pipeline for efficient preprocessing
+    transform = transforms.Compose(
+        [
+            transforms.Resize((img_scaled_height, img_scaled_width), antialias=True),
+            transforms.ToTensor(),  # Converts PIL to tensor, normalizes to [0,1], and converts to CHW
+        ]
+    )
 
-    image_tensor = torch.from_numpy(image_array).permute(2, 0, 1)  # HWC to CHW
-    image_tensor = F.interpolate(image_tensor.unsqueeze(0), size=(img_scaled_height, img_scaled_width), mode="area").squeeze(0)
-    image = image_tensor.permute(1, 2, 0)  # CHW back to HWC for processing
+    pil_image = Image.open(path).convert("RGB")
+    image_tensor = transform(pil_image)  # Already in CHW format
+    image = image_tensor.permute(1, 2, 0)  # CHW to HWC for processing
 
     label_tensor = torch.tensor(label, dtype=torch.float32)
 
@@ -124,28 +129,28 @@ def patchify_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tens
 
     patches_y = image.shape[0] // patch_height
     patches_x = image.shape[1] // patch_width
-    
+
     # Use unfold to extract all patches in a vectorized way
     # unfold(dimension, size, step) extracts sliding windows
     patches = image.unfold(0, patch_height, patch_height).unfold(1, patch_width, patch_width)
-    # Reshape from (patches_y, patches_x, channels, patch_height, patch_width) 
+    # Reshape from (patches_y, patches_x, channels, patch_height, patch_width)
     # to (num_patches, patch_height, patch_width, channels)
     patches = patches.permute(0, 1, 3, 4, 2).contiguous().view(-1, patch_height, patch_width, image.shape[2])
-    
+
     # Create coordinate grids for vectorized label computation
     y_coords = torch.arange(patches_y, dtype=torch.float32) * patch_height
     x_coords = torch.arange(patches_x, dtype=torch.float32) * patch_width
-    
+
     # Create meshgrid and flatten to match patch order
-    yy, xx = torch.meshgrid(y_coords, x_coords, indexing='ij')
+    yy, xx = torch.meshgrid(y_coords, x_coords, indexing="ij")
     xx_flat = xx.flatten()
     yy_flat = yy.flatten()
-    
+
     # Vectorized label adjustment
     adjusted_cx = cx - xx_flat
     adjusted_cy = cy - yy_flat
     d_repeated = d.expand(len(xx_flat))
-    
+
     labels = torch.stack([adjusted_cx, adjusted_cy, d_repeated], dim=1)
 
     return patches, labels
@@ -253,18 +258,34 @@ class BallPatchDataset(Dataset):
 
         # Apply augmentations to all patches using vectorized operations
         # patches shape: (num_patches, patch_height, patch_width, channels)
-        
+
         # Convert all patches to YUV color space in batch
         patches_scaled = patches * 255.0
         augmented_patches = rgb2yuv(patches_scaled)
 
-        # Apply final adjustments
-        _, final_labels = final_adjustments_patches(augmented_patches[0], patch_labels)
+        # Apply final adjustments using batch processing
+        augmented_patches_normalized, final_labels = final_adjustments_patches(augmented_patches, patch_labels)
 
         # Convert patches to CHW format
-        augmented_patches = augmented_patches.permute(0, 3, 1, 2)  # NHWC to NCHW
+        augmented_patches_final = augmented_patches_normalized.permute(0, 3, 1, 2)  # NHWC to NCHW
 
-        return augmented_patches, final_labels
+        return augmented_patches_final, final_labels
+
+
+def patch_collate_fn(batch: list[tuple[torch.Tensor, torch.Tensor]]) -> tuple[torch.Tensor, torch.Tensor]:
+    """Custom collate function for patch-based dataset to handle variable patch counts."""
+    all_patches = []
+    all_labels = []
+
+    for patches, labels in batch:
+        all_patches.append(patches)
+        all_labels.append(labels)
+
+    # Concatenate all patches and labels across batch dimension
+    batched_patches = torch.cat(all_patches, dim=0)
+    batched_labels = torch.cat(all_labels, dim=0)
+
+    return batched_patches, batched_labels
 
 
 def create_dataset_image_based(
@@ -272,46 +293,98 @@ def create_dataset_image_based(
 ) -> DataLoader:
     """Create PyTorch DataLoader for patch-based dataset."""
     dataset = BallPatchDataset(images, labels)
-    return DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
+    return DataLoader(
+        dataset, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True, collate_fn=patch_collate_fn
+    )
+
+
+class ColorSpaceConverter:
+    """Efficient color space conversion with cached transformation matrices."""
+
+    _rgb_to_yuv_cache: dict[str, torch.Tensor] = {}
+    _yuv_to_rgb_cache: dict[str, torch.Tensor] = {}
+    _yuv_bias_cache: dict[str, torch.Tensor] = {}
+    _rgb_bias_cache: dict[str, torch.Tensor] = {}
+
+    @classmethod
+    def _get_rgb_to_yuv_matrix(cls, device: torch.device) -> torch.Tensor:
+        """Get cached RGB to YUV transformation matrix."""
+        device_key = str(device)
+        if device_key not in cls._rgb_to_yuv_cache:
+            cls._rgb_to_yuv_cache[device_key] = torch.tensor(
+                [[0.299, -0.169, 0.498], [0.587, -0.331, -0.419], [0.114, 0.499, -0.0813]],
+                dtype=torch.float32,
+                device=device,
+            )
+        return cls._rgb_to_yuv_cache[device_key]
+
+    @classmethod
+    def _get_yuv_to_rgb_matrix(cls, device: torch.device) -> torch.Tensor:
+        """Get cached YUV to RGB transformation matrix."""
+        device_key = str(device)
+        if device_key not in cls._yuv_to_rgb_cache:
+            cls._yuv_to_rgb_cache[device_key] = torch.tensor(
+                [
+                    [1.0, 1.0, 1.0],
+                    [-0.000007154783816076815, -0.3441331386566162, 1.7720025777816772],
+                    [1.4019975662231445, -0.7141380310058594, 0.00001542569043522235],
+                ],
+                dtype=torch.float32,
+                device=device,
+            )
+        return cls._yuv_to_rgb_cache[device_key]
+
+    @classmethod
+    def _get_yuv_bias(cls, device: torch.device) -> torch.Tensor:
+        """Get cached YUV bias tensor."""
+        device_key = str(device)
+        if device_key not in cls._yuv_bias_cache:
+            cls._yuv_bias_cache[device_key] = torch.tensor([0, 128, 128], device=device)
+        return cls._yuv_bias_cache[device_key]
+
+    @classmethod
+    def _get_rgb_bias(cls, device: torch.device) -> torch.Tensor:
+        """Get cached RGB bias tensor."""
+        device_key = str(device)
+        if device_key not in cls._rgb_bias_cache:
+            cls._rgb_bias_cache[device_key] = torch.tensor(
+                [-179.45477266423404, 135.45870971679688, -226.8183044444304], device=device
+            )
+        return cls._rgb_bias_cache[device_key]
 
 
 def rgb2yuv(rgb: torch.Tensor) -> torch.Tensor:
     """Convert RGB to YUV color space, supporting batch processing."""
-    m = torch.tensor([[0.299, -0.169, 0.498], [0.587, -0.331, -0.419], [0.114, 0.499, -0.0813]], dtype=torch.float32)
+    device = rgb.device
+    m = ColorSpaceConverter._get_rgb_to_yuv_matrix(device)
 
     # Handle both single images and batches of images
     original_shape = rgb.shape
-    
+
     # Flatten spatial dimensions while preserving batch dimension if present
     if len(original_shape) == 4:  # Batch of images: (batch, H, W, 3)
         rgb_flat = rgb.view(-1, 3)
     else:  # Single image: (H, W, 3)
         rgb_flat = rgb.view(-1, 3)
-    
+
     yuv_flat = torch.mm(rgb_flat, m.t())
     yuv = yuv_flat.view(original_shape)
-    yuv += torch.tensor([0, 128, 128])
+    yuv += ColorSpaceConverter._get_yuv_bias(device)
 
     return yuv
 
 
 def yuv2rgb(yuv: torch.Tensor) -> torch.Tensor:
     """Convert YUV to RGB color space."""
-    m = torch.tensor(
-        [
-            [1.0, 1.0, 1.0],
-            [-0.000007154783816076815, -0.3441331386566162, 1.7720025777816772],
-            [1.4019975662231445, -0.7141380310058594, 0.00001542569043522235],
-        ],
-        dtype=torch.float32,
-    )
+    device = yuv.device
+    m = ColorSpaceConverter._get_yuv_to_rgb_matrix(device)
 
     # Reshape for matrix multiplication
     original_shape = yuv.shape
     yuv_flat = yuv.view(-1, 3)
     rgb_flat = torch.mm(yuv_flat, m.t())
     rgb = rgb_flat.view(original_shape)
-    rgb += torch.tensor([-179.45477266423404, 135.45870971679688, -226.8183044444304])
+    rgb += ColorSpaceConverter._get_rgb_bias(device)
 
     return rgb
 
@@ -335,5 +408,6 @@ def show_dataset(ds: DataLoader) -> None:
         plt.axis("off")
 
     plt.waitforbuttonpress()
+    plt.close()
     plt.close()
     plt.close()

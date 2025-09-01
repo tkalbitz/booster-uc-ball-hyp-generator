@@ -68,64 +68,64 @@ class SEBlock(nn.Module):
 class NetworkV2(nn.Module):
     def __init__(self, input_height: int, input_width: int) -> None:
         super().__init__()
-        self.input_bn = nn.BatchNorm2d(3)
-        self.conv_bn1 = Conv2dBn(3, 8, kernel_size=3, stride=1, padding=1, activation='relu')
         
-        self.big_little1 = BigLittleReduction(8, 10, 'relu')
-        self.dropout1 = nn.Dropout(0.2)
+        # Feature extraction backbone
+        self.backbone = nn.Sequential(
+            nn.BatchNorm2d(3),
+            Conv2dBn(3, 8, kernel_size=3, stride=1, padding=1, activation='relu'),
+        )
         
-        self.big_little2 = BigLittleReduction(15, 12, 'relu')
-        self.se_block1 = SEBlock(18)
-        self.dropout2 = nn.Dropout(0.1)
+        # Feature processing blocks
+        self.feature_blocks = nn.ModuleList([
+            nn.Sequential(
+                BigLittleReduction(8, 10, 'relu'),
+                nn.Dropout(0.2)
+            ),
+            nn.Sequential(
+                BigLittleReduction(15, 12, 'relu'),
+                SEBlock(18),
+                nn.Dropout(0.1)
+            ),
+            nn.Sequential(
+                BigLittleReduction(18, 12, 'relu'),
+                SEBlock(18),
+                nn.Dropout(0.1)
+            ),
+            nn.Sequential(
+                BigLittleReduction(18, 14, 'relu'),
+                SEBlock(21),
+                nn.Dropout(0.1)
+            )
+        ])
         
-        self.big_little3 = BigLittleReduction(18, 12, 'relu')
-        self.se_block2 = SEBlock(18)
-        self.dropout3 = nn.Dropout(0.1)
+        # Calculate the size after all reductions dynamically
+        self._calculate_fc_input_size(input_height, input_width)
         
-        self.big_little4 = BigLittleReduction(18, 14, 'relu')
-        self.se_block3 = SEBlock(21)
-        self.dropout4 = nn.Dropout(0.1)
-        
-        # Calculate the size after all reductions
+        # Classification head
+        self.classifier = nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(self.fc_input_size, 32),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.Linear(32, 2),
+            nn.Tanh()
+        )
+    
+    def _calculate_fc_input_size(self, input_height: int, input_width: int) -> None:
+        """Dynamically calculate fully connected layer input size."""
         # Each big_little_reduction halves the spatial dimensions
-        final_h = input_height // (2 ** 4)  # 4 reductions
-        final_w = input_width // (2 ** 4)
-        final_channels = 21
-        
-        self.flatten = nn.Flatten()
-        self.fc1 = nn.Linear(final_channels * final_h * final_w, 32)
-        self.fc1_bn = nn.BatchNorm1d(32)
-        self.fc1_activation = _activation('relu')
-        
-        self.fc2 = nn.Linear(32, 2)
-        self.output_activation = _activation('tanh')
+        final_h = input_height // (2 ** len(self.feature_blocks))
+        final_w = input_width // (2 ** len(self.feature_blocks))
+        final_channels = 21  # Final output channels from last feature block
+        self.fc_input_size = final_channels * final_h * final_w
     
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.input_bn(x)
-        x = self.conv_bn1(x)
+        x = self.backbone(x)
         
-        x = self.big_little1(x)
-        x = self.dropout1(x)
+        for block in self.feature_blocks:
+            x = block(x)
         
-        x = self.big_little2(x)
-        x = self.se_block1(x)
-        x = self.dropout2(x)
-        
-        x = self.big_little3(x)
-        x = self.se_block2(x)
-        x = self.dropout3(x)
-        
-        x = self.big_little4(x)
-        x = self.se_block3(x)
-        x = self.dropout4(x)
-        
-        x = self.flatten(x)
-        x = self.fc1(x)
-        x = self.fc1_bn(x)
-        x = self.fc1_activation(x)
-        
-        x = self.fc2(x)
-        x = self.output_activation(x)
+        x = self.classifier(x)
         
         return x
 

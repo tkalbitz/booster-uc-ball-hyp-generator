@@ -26,17 +26,27 @@ class DistanceLoss(nn.Module):
     
     def __init__(self) -> None:
         super().__init__()
+        # Pre-compute constant tensor to avoid creating it in forward pass
+        self.register_buffer('log_two', torch.log(torch.tensor(2.0)))
+        self.register_buffer('confidence_scale', torch.tensor(3.0))
     
     def _logcosh(self, x: torch.Tensor) -> torch.Tensor:
         """Stable log-cosh function."""
-        return x + torch.nn.functional.softplus(-2. * x) - torch.log(torch.tensor(2.))
+        return x + torch.nn.functional.softplus(-2. * x) - torch.as_tensor(self.log_two)
     
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
-        y_t = torch.stack([torch.as_tensor(unscale_x(y_true[:,0])), torch.as_tensor(unscale_y(y_true[:,1]))], dim=1)
-        y_p = torch.stack([torch.as_tensor(unscale_x(y_pred[:,0])), torch.as_tensor(unscale_y(y_pred[:,1]))], dim=1)
+        # Vectorized unscaling operations avoiding tensor creation
+        y_t_x = torch.as_tensor(unscale_x(y_true[:, 0]))
+        y_t_y = torch.as_tensor(unscale_y(y_true[:, 1]))
+        y_p_x = torch.as_tensor(unscale_x(y_pred[:, 0]))
+        y_p_y = torch.as_tensor(unscale_y(y_pred[:, 1]))
+        
+        # Stack operations
+        y_t = torch.stack([y_t_x, y_t_y], dim=1)
+        y_p = torch.stack([y_p_x, y_p_y], dim=1)
         
         r = self._logcosh(y_p - y_t)
-        e = torch.exp(3. / y_true[:,2])
+        e = torch.exp(self.confidence_scale / y_true[:, 2])
         r = r * e.unsqueeze(1)
         return torch.mean(r)
 

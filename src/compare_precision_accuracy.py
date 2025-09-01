@@ -40,6 +40,7 @@ def evaluate_model_accuracy(
     model: Any, 
     data_loader: Any, 
     model_type: str,
+    device: torch.device | None = None,
     num_samples: int = 1000
 ) -> dict[str, float]:
     """Evaluate model accuracy on test data.
@@ -48,11 +49,15 @@ def evaluate_model_accuracy(
         model: Model to evaluate (PyTorch or TensorRT)
         data_loader: Data loader with test samples
         model_type: Type of model ("pytorch", "tensorrt")
+        device: Device to run evaluation on (for PyTorch models)
         num_samples: Number of samples to evaluate
         
     Returns:
         Dictionary with accuracy metrics
     """
+    if device is None:
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
     found_ball_metric = FoundBallMetric()
     total_samples = 0
     total_time = 0.0
@@ -63,7 +68,7 @@ def evaluate_model_accuracy(
             break
             
         if model_type == "pytorch":
-            images = images.cuda()
+            images = images.to(device)
             start_time = time.time()
             with torch.no_grad():
                 predictions = model(images)
@@ -161,10 +166,11 @@ def compare_model_precisions(
     
     # Evaluate original PyTorch model
     print("1. Evaluating PyTorch FP32 model...")
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     try:
-        pytorch_model = load_pytorch_model(pytorch_model_path)
+        pytorch_model = load_pytorch_model(pytorch_model_path, device.type)
         results["pytorch_fp32"] = evaluate_model_accuracy(
-            pytorch_model, data_loader, "pytorch", num_samples
+            pytorch_model, data_loader, "pytorch", device, num_samples
         )
         print(f"   ✓ Accuracy: {results['pytorch_fp32']['accuracy']:.4f}")
         print(f"   ✓ Avg time: {results['pytorch_fp32']['avg_inference_time_ms']:.2f} ms")
@@ -180,7 +186,7 @@ def compare_model_precisions(
             
             data_loader_fp16 = create_dataset(test_img, test_labels, 1, trainset=False) if 'test_img' in locals() else synthetic_data_loader()
             results["tensorrt_fp16"] = evaluate_model_accuracy(
-                fp16_model, data_loader_fp16, "tensorrt", num_samples
+                fp16_model, data_loader_fp16, "tensorrt", device, num_samples
             )
             print(f"   ✓ Accuracy: {results['tensorrt_fp16']['accuracy']:.4f}")
             print(f"   ✓ Avg time: {results['tensorrt_fp16']['avg_inference_time_ms']:.2f} ms")
@@ -198,7 +204,7 @@ def compare_model_precisions(
             
             data_loader_int8 = create_dataset(test_img, test_labels, 1, trainset=False) if 'test_img' in locals() else synthetic_data_loader()
             results["tensorrt_int8"] = evaluate_model_accuracy(
-                int8_model, data_loader_int8, "tensorrt", num_samples
+                int8_model, data_loader_int8, "tensorrt", device, num_samples
             )
             print(f"   ✓ Accuracy: {results['tensorrt_int8']['accuracy']:.4f}")
             print(f"   ✓ Avg time: {results['tensorrt_int8']['avg_inference_time_ms']:.2f} ms")
