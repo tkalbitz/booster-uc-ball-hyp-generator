@@ -1,7 +1,7 @@
 import torch
 
-from config import patch_width, patch_height
-from scale import unscale_x, unscale_y
+from src.config import patch_width, patch_height
+from src.scale import unscale_x, unscale_y
 
 
 class FoundBallMetric:

@@ -7,8 +7,8 @@ from matplotlib.patches import Ellipse
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
-from config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
-from scale import scale_x, scale_y
+from src.config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
+from src.scale import scale_x, scale_y
 
 
 def downsample_by_averaging(img: npt.NDArray[np.float32], scale: tuple[int, int]) -> npt.NDArray[np.float32]:
@@ -333,13 +333,12 @@ YUV_BIAS = torch.tensor([0, 128, 128], dtype=torch.float32)
 RGB_BIAS = torch.tensor([-179.45477266423404, 135.45870971679688, -226.8183044444304], dtype=torch.float32)
 
 
-@torch.jit.script
 def rgb2yuv_optimized(rgb: torch.Tensor) -> torch.Tensor:
-    """Optimized RGB to YUV color space conversion using JIT compilation."""
+    """Optimized RGB to YUV color space conversion."""
     device = rgb.device
     dtype = rgb.dtype
     
-    # Move matrices to device if needed (cached by JIT)
+    # Move matrices to device if needed
     transform_matrix = RGB_TO_YUV_MATRIX.to(device=device, dtype=dtype)
     bias = YUV_BIAS.to(device=device, dtype=dtype)
     
@@ -352,15 +351,13 @@ def rgb2yuv_optimized(rgb: torch.Tensor) -> torch.Tensor:
     
     yuv = yuv + bias
     return yuv
-
-
-@torch.jit.script  
+ 
 def yuv2rgb_optimized(yuv: torch.Tensor) -> torch.Tensor:
-    """Optimized YUV to RGB color space conversion using JIT compilation."""
+    """Optimized YUV to RGB color space conversion."""
     device = yuv.device
     dtype = yuv.dtype
     
-    # Move matrices to device if needed (cached by JIT)
+    # Move matrices to device if needed
     transform_matrix = YUV_TO_RGB_MATRIX.to(device=device, dtype=dtype)
     bias = RGB_BIAS.to(device=device, dtype=dtype)
     

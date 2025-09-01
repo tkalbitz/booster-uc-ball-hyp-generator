@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from logger import get_logger
+from src.logger import get_logger
 
 _logger = get_logger(__name__)
 

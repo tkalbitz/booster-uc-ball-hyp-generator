@@ -2,7 +2,7 @@ import torch
 
 # Our output is from [-1,1]. So we use input_width/2 to cover the whole image.
 # We want to also find objects where the center is a bit outside of the picture so we scale the number by a factor of 1.2
-from config import patch_width, patch_height
+from src.config import patch_width, patch_height
 
 output_width: float = (patch_width/2)*1.2
 output_height: float = (patch_height/2)*1.2

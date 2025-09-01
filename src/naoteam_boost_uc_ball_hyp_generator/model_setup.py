@@ -12,11 +12,11 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
-import models
-from logger import get_logger
-from utils import get_flops
-from config import patch_height, patch_width
-from scale import unscale_x, unscale_y
+from src import models
+from src.logger import get_logger
+from src.utils import get_flops
+from src.config import patch_height, patch_width
+from src.scale import unscale_x, unscale_y
 
 _logger = get_logger(__name__)
 
