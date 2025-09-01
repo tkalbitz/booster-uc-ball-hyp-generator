@@ -1,15 +1,17 @@
 import torch
 
-from src.config import patch_width, patch_height
-from src.scale import unscale_x, unscale_y
+from uc_ball_hyp_generator.config import patch_height, patch_width
+from uc_ball_hyp_generator.scale import unscale_x, unscale_y
 
 
 class FoundBallMetric:
-    def __init__(self, name: str = 'found_balls') -> None:
+    def __init__(self, name: str = "found_balls") -> None:
         self.name = name
         self.reset_states()
 
-    def update_state(self, y_true: torch.Tensor, y_pred: torch.Tensor, sample_weight: torch.Tensor | None = None) -> None:
+    def update_state(
+        self, y_true: torch.Tensor, y_pred: torch.Tensor, sample_weight: torch.Tensor | None = None
+    ) -> None:
         """Update the metric state with new predictions."""
         x_t = unscale_x(y_true[:, 0]) + patch_width / 2
         y_t = unscale_y(y_true[:, 1]) + patch_height / 2

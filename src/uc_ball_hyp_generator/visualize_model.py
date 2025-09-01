@@ -1,20 +1,19 @@
-
 import torch
 from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
 
-import models
-from config import patch_height, patch_width, image_dir, testset_csv_collection
-from csv_label_reader import load_csv_collection
-from dataset_handling import create_dataset, yuv2rgb
-from scale import unscale_x, unscale_y
-from utils import get_flops
+import uc_ball_hyp_generator.models as models
+from uc_ball_hyp_generator.config import image_dir, patch_height, patch_width, testset_csv_collection
+from uc_ball_hyp_generator.csv_label_reader import load_csv_collection
+from uc_ball_hyp_generator.dataset_handling import create_dataset, yuv2rgb
+from uc_ball_hyp_generator.scale import unscale_x, unscale_y
+from uc_ball_hyp_generator.utils import get_flops
 
-if __name__ != '__main__':
+if __name__ != "__main__":
     exit(1)
 
 # Set device
-device: torch.device = torch.device('cpu')  # Force CPU for visualization
+device: torch.device = torch.device("cpu")  # Force CPU for visualization
 print(f"Using device: {device}")
 
 png_files: dict[str, str] = {f.name: str(f) for f in image_dir.glob("**/*.png")}
@@ -48,10 +47,10 @@ it = iter(ds)
 
 while True:
     image_batch, label_batch = next(it)
-    
+
     # Convert to tensors and move to device
     image_batch = image_batch.to(device)
-    
+
     with torch.no_grad():
         pred_loss = model_loss(image_batch)
         pred_acc = model_acc(image_batch)
@@ -59,12 +58,12 @@ while True:
     plt.figure(figsize=(30, 30))
     for i in range(min(9, len(image_batch))):
         ax = plt.subplot(3, 3, i + 1)
-        
+
         # Convert image back to HWC format and to numpy
         image_np = image_batch[i].permute(1, 2, 0).cpu().numpy()
-        image_rgb = yuv2rgb(image_np * 255.).clamp(0, 255).int().numpy()
+        image_rgb = yuv2rgb(image_np * 255.0).clamp(0, 255).int().numpy()
         plt.imshow(image_rgb)
-        
+
         label_true = label_batch[i]
         label_pred_loss = pred_loss[i].cpu()
         label_pred_acc = pred_acc[i].cpu()
@@ -78,10 +77,11 @@ while True:
         x_pa = float(unscale_x(label_pred_acc[0]) + patch_width / 2)
         y_pa = float(unscale_y(label_pred_acc[1]) + patch_height / 2)
 
-        plt.gca().add_patch(Ellipse((x_t, y_t), 3, 3, linewidth=1, edgecolor='b', facecolor='none'))
-        plt.gca().add_patch(Ellipse((x_pl, y_pl), 3, 3, linewidth=1, edgecolor='r', facecolor='none'))
-        plt.gca().add_patch(Ellipse((x_pa, y_pa), 3, 3, linewidth=1, edgecolor='g', facecolor='none'))
+        plt.gca().add_patch(Ellipse((x_t, y_t), 3, 3, linewidth=1, edgecolor="b", facecolor="none"))
+        plt.gca().add_patch(Ellipse((x_pl, y_pl), 3, 3, linewidth=1, edgecolor="r", facecolor="none"))
+        plt.gca().add_patch(Ellipse((x_pa, y_pa), 3, 3, linewidth=1, edgecolor="g", facecolor="none"))
 
         plt.axis("off")
     plt.waitforbuttonpress()
+    plt.close()
     plt.close()

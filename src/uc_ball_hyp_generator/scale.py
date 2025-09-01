@@ -2,14 +2,16 @@ import torch
 
 # Our output is from [-1,1]. So we use input_width/2 to cover the whole image.
 # We want to also find objects where the center is a bit outside of the picture so we scale the number by a factor of 1.2
-from src.config import patch_width, patch_height
+from uc_ball_hyp_generator.config import patch_height, patch_width
 
-output_width: float = (patch_width/2)*1.2
-output_height: float = (patch_height/2)*1.2
+output_width: float = (patch_width / 2) * 1.2
+output_height: float = (patch_height / 2) * 1.2
 
 
-def scale(x: float | torch.Tensor, from_min: float, from_max: float, to_min: float, to_max: float) -> float | torch.Tensor:
-    return ((to_max-to_min)*(x-from_min)) / (from_max-from_min) + to_min
+def scale(
+    x: float | torch.Tensor, from_min: float, from_max: float, to_min: float, to_max: float
+) -> float | torch.Tensor:
+    return ((to_max - to_min) * (x - from_min)) / (from_max - from_min) + to_min
 
 
 def scale_x(x: float | torch.Tensor) -> float | torch.Tensor:

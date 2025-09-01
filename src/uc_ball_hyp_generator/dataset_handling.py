@@ -7,8 +7,8 @@ from matplotlib.patches import Ellipse
 from PIL import Image
 from torch.utils.data import DataLoader, Dataset
 
-from src.config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
-from src.scale import scale_x, scale_y
+from uc_ball_hyp_generator.config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
+from uc_ball_hyp_generator.scale import scale_x, scale_y
 
 
 def downsample_by_averaging(img: npt.NDArray[np.float32], scale: tuple[int, int]) -> npt.NDArray[np.float32]:
@@ -180,11 +180,11 @@ def train_augment_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch
 
 def test_augment_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
     """Apply test augmentations (RGB to YUV conversion only), working with CHW format."""
-    # Convert to YUV - need HWC format temporarily for color conversion  
+    # Convert to YUV - need HWC format temporarily for color conversion
     image_hwc = image.permute(1, 2, 0)  # CHW to HWC for color conversion
     yuv_hwc = rgb2yuv(image_hwc * 255.0)
     yuv_chw = yuv_hwc.permute(2, 0, 1)  # Back to CHW
-    
+
     return yuv_chw, label
 
 
@@ -242,12 +242,12 @@ def create_dataset(
     """Create PyTorch DataLoader for the dataset."""
     dataset = BallDataset(images, labels, trainset)
     return DataLoader(
-        dataset, 
-        batch_size=batch_size, 
-        shuffle=trainset, 
+        dataset,
+        batch_size=batch_size,
+        shuffle=trainset,
         num_workers=2,
         pin_memory=True,
-        persistent_workers=True if len(images) > 100 else False
+        persistent_workers=True if len(images) > 100 else False,
     )
 
 
@@ -306,28 +306,29 @@ def create_dataset_image_based(
     """Create PyTorch DataLoader for patch-based dataset."""
     dataset = BallPatchDataset(images, labels)
     return DataLoader(
-        dataset, 
-        batch_size=batch_size, 
-        shuffle=False, 
-        num_workers=2, 
-        pin_memory=True, 
+        dataset,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=2,
+        pin_memory=True,
         collate_fn=patch_collate_fn,
-        persistent_workers=True if len(images) > 100 else False
+        persistent_workers=True if len(images) > 100 else False,
     )
 
 
 # Pre-computed transformation matrices as constants
-RGB_TO_YUV_MATRIX = torch.tensor([
-    [0.299, -0.169, 0.498], 
-    [0.587, -0.331, -0.419], 
-    [0.114, 0.499, -0.0813]
-], dtype=torch.float32)
+RGB_TO_YUV_MATRIX = torch.tensor(
+    [[0.299, -0.169, 0.498], [0.587, -0.331, -0.419], [0.114, 0.499, -0.0813]], dtype=torch.float32
+)
 
-YUV_TO_RGB_MATRIX = torch.tensor([
-    [1.0, 1.0, 1.0],
-    [-0.000007154783816076815, -0.3441331386566162, 1.7720025777816772],
-    [1.4019975662231445, -0.7141380310058594, 0.00001542569043522235],
-], dtype=torch.float32)
+YUV_TO_RGB_MATRIX = torch.tensor(
+    [
+        [1.0, 1.0, 1.0],
+        [-0.000007154783816076815, -0.3441331386566162, 1.7720025777816772],
+        [1.4019975662231445, -0.7141380310058594, 0.00001542569043522235],
+    ],
+    dtype=torch.float32,
+)
 
 YUV_BIAS = torch.tensor([0, 128, 128], dtype=torch.float32)
 RGB_BIAS = torch.tensor([-179.45477266423404, 135.45870971679688, -226.8183044444304], dtype=torch.float32)
@@ -337,36 +338,37 @@ def rgb2yuv_optimized(rgb: torch.Tensor) -> torch.Tensor:
     """Optimized RGB to YUV color space conversion."""
     device = rgb.device
     dtype = rgb.dtype
-    
+
     # Move matrices to device if needed
     transform_matrix = RGB_TO_YUV_MATRIX.to(device=device, dtype=dtype)
     bias = YUV_BIAS.to(device=device, dtype=dtype)
-    
+
     # More efficient tensor operations - avoid unnecessary reshaping
     # Use einsum for better performance on matrix multiplication
     if len(rgb.shape) == 4:  # Batch of images: (N, H, W, 3)
-        yuv = torch.einsum('nhwc,kc->nhwk', rgb, transform_matrix)
+        yuv = torch.einsum("nhwc,kc->nhwk", rgb, transform_matrix)
     else:  # Single image: (H, W, 3)
-        yuv = torch.einsum('hwc,kc->hwk', rgb, transform_matrix)
-    
+        yuv = torch.einsum("hwc,kc->hwk", rgb, transform_matrix)
+
     yuv = yuv + bias
     return yuv
- 
+
+
 def yuv2rgb_optimized(yuv: torch.Tensor) -> torch.Tensor:
     """Optimized YUV to RGB color space conversion."""
     device = yuv.device
     dtype = yuv.dtype
-    
+
     # Move matrices to device if needed
     transform_matrix = YUV_TO_RGB_MATRIX.to(device=device, dtype=dtype)
     bias = RGB_BIAS.to(device=device, dtype=dtype)
-    
+
     # More efficient tensor operations
     if len(yuv.shape) == 4:  # Batch of images: (N, H, W, 3)
-        rgb = torch.einsum('nhwc,kc->nhwk', yuv, transform_matrix)
+        rgb = torch.einsum("nhwc,kc->nhwk", yuv, transform_matrix)
     else:  # Single image: (H, W, 3)
-        rgb = torch.einsum('hwc,kc->hwk', yuv, transform_matrix)
-    
+        rgb = torch.einsum("hwc,kc->hwk", yuv, transform_matrix)
+
     rgb = rgb + bias
     return rgb
 
@@ -401,6 +403,8 @@ def show_dataset(ds: DataLoader) -> None:
         plt.axis("off")
 
     plt.waitforbuttonpress()
+    plt.close()
+    plt.close()
     plt.close()
     plt.close()
     plt.close()

@@ -1,16 +1,16 @@
 import torch
 
-import models
-from config import patch_height, patch_width, image_dir, testset_csv_collection
-from csv_label_reader import load_csv_collection
-from dataset_handling import create_dataset_image_based
-from scale import unscale_x, unscale_y
+import uc_ball_hyp_generator.models as models
+from uc_ball_hyp_generator.config import image_dir, patch_height, patch_width, testset_csv_collection
+from uc_ball_hyp_generator.csv_label_reader import load_csv_collection
+from uc_ball_hyp_generator.dataset_handling import create_dataset_image_based
+from uc_ball_hyp_generator.scale import unscale_x, unscale_y
 
-if __name__ != '__main__':
+if __name__ != "__main__":
     exit(1)
 
 # Set device
-device: torch.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 png_files: dict[str, str] = {f.name: str(f) for f in image_dir.glob("**/*.png")}
@@ -36,7 +36,7 @@ it = iter(ds)
 
 for s in range(steps):
     image_batch, label_batch = next(it)
-    
+
     # Convert to tensors and move to device
     input_batch = image_batch[0].to(device)
     label_batch = label_batch.to(device)
@@ -44,16 +44,20 @@ for s in range(steps):
     with torch.no_grad():
         pred = model(input_batch)
 
-    x_t = torch.tensor(unscale_x(label_batch[:,0])) + patch_width / 2
-    y_t = torch.tensor(unscale_y(label_batch[:,1])) + patch_height / 2
+    x_t = torch.tensor(unscale_x(label_batch[:, 0])) + patch_width / 2
+    y_t = torch.tensor(unscale_y(label_batch[:, 1])) + patch_height / 2
 
-    x_p = torch.tensor(unscale_x(pred[:,0])) + patch_width / 2
-    y_p = torch.tensor(unscale_y(pred[:,1])) + patch_height / 2
+    x_p = torch.tensor(unscale_x(pred[:, 0])) + patch_width / 2
+    y_p = torch.tensor(unscale_y(pred[:, 1])) + patch_height / 2
 
-    d = torch.sqrt((x_t - x_p)**2 + (y_t - y_p)**2)
-    r = d < label_batch[:,2]
+    d = torch.sqrt((x_t - x_p) ** 2 + (y_t - y_p) ** 2)
+    r = d < label_batch[:, 2]
     found = torch.sum(r.int()) > 0
     ball_sum += int(found.item())
 
 
+print(f"Found in total {ball_sum} / {steps * batch_size}")
+print(f"Found in total {ball_sum} / {steps * batch_size}")
+print(f"Found in total {ball_sum} / {steps * batch_size}")
+print(f"Found in total {ball_sum} / {steps * batch_size}")
 print(f"Found in total {ball_sum} / {steps * batch_size}")

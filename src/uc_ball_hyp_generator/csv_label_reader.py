@@ -1,12 +1,14 @@
 import re
 from pathlib import Path
 
-from src.logger import get_logger
+from uc_ball_hyp_generator.logger import get_logger
 
 _logger = get_logger(__name__)
 
 
-def read_csv_label(csv_file: Path, img_files: dict[str, str]) -> tuple[tuple[list[str], list[tuple[int, int, int, int]], list[str]], int]:
+def read_csv_label(
+    csv_file: Path, img_files: dict[str, str]
+) -> tuple[tuple[list[str], list[tuple[int, int, int, int]], list[str]], int]:
     regex = re.compile(r"(.+_U\.png);\d+;[^;]+;Ball;(\d+);(\d+);(\d+);(\d+);Ball")
     ignore = re.compile(r"(.+_U\.png);\d+;[^;]+;Ignore")
 
@@ -15,7 +17,6 @@ def read_csv_label(csv_file: Path, img_files: dict[str, str]) -> tuple[tuple[lis
     found_files: set[str] = set()
 
     for line in csv_file.open():
-
         # Complete file should be ignored
         m = ignore.match(line)
         if m:
@@ -68,7 +69,9 @@ def read_csv_label(csv_file: Path, img_files: dict[str, str]) -> tuple[tuple[lis
     return (list(imgs), list(labels), list(lines)), skipped_balls
 
 
-def load_csv_collection(file: Path, img_files: dict[str, str]) -> tuple[list[str], list[tuple[int, int, int, int]], int]:
+def load_csv_collection(
+    file: Path, img_files: dict[str, str]
+) -> tuple[list[str], list[tuple[int, int, int, int]], int]:
     res_imgs: list[str] = []
     res_labels: list[tuple[int, int, int, int]] = []
     res_lines: list[str] = []
@@ -81,12 +84,11 @@ def load_csv_collection(file: Path, img_files: dict[str, str]) -> tuple[list[str
         res_lines += lines
         skipped += ignored
 
-
     return res_imgs, res_labels, skipped
 
 
-if __name__ == '__main__':
-    start_dir = Path('/home/tkalbitz/temp/BallImages/')
+if __name__ == "__main__":
+    start_dir = Path("/home/tkalbitz/temp/BallImages/")
 
     cnt_balls: int = 0
     to_small: int = 0
