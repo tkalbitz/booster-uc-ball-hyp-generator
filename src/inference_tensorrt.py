@@ -8,8 +8,8 @@ from pathlib import Path
 import torch
 import numpy as np
 from PIL import Image
-import tensorrt as trt
-import pycuda.driver as cuda
+import tensorrt as trt  # type: ignore[import-untyped]
+import pycuda.driver as cuda  # type: ignore[import-not-found]
 
 from config import patch_height, patch_width
 from scale import unscale_x, unscale_y
@@ -81,7 +81,7 @@ def load_and_preprocess_image(image_path: str) -> np.ndarray:
     image = Image.open(image_path)
     
     if image.size != (patch_width, patch_height):
-        image = image.resize((patch_width, patch_height), Image.Resampling.LANCZOS)
+        image = image.resize((patch_width, patch_height), Image.Resampling.LANCZOS)  # type: ignore[assignment]
     
     image_array = np.array(image)
     

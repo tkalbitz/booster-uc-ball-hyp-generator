@@ -69,14 +69,14 @@ while True:
         label_pred_loss = pred_loss[i].cpu()
         label_pred_acc = pred_acc[i].cpu()
 
-        x_t = unscale_x(label_true[0]) + patch_width / 2
-        y_t = unscale_y(label_true[1]) + patch_height / 2
+        x_t = float(unscale_x(label_true[0]) + patch_width / 2)
+        y_t = float(unscale_y(label_true[1]) + patch_height / 2)
 
-        x_pl = unscale_x(label_pred_loss[0]) + patch_width / 2
-        y_pl = unscale_y(label_pred_loss[1]) + patch_height / 2
+        x_pl = float(unscale_x(label_pred_loss[0]) + patch_width / 2)
+        y_pl = float(unscale_y(label_pred_loss[1]) + patch_height / 2)
 
-        x_pa = unscale_x(label_pred_acc[0]) + patch_width / 2
-        y_pa = unscale_y(label_pred_acc[1]) + patch_height / 2
+        x_pa = float(unscale_x(label_pred_acc[0]) + patch_width / 2)
+        y_pa = float(unscale_y(label_pred_acc[1]) + patch_height / 2)
 
         plt.gca().add_patch(Ellipse((x_t, y_t), 3, 3, linewidth=1, edgecolor='b', facecolor='none'))
         plt.gca().add_patch(Ellipse((x_pl, y_pl), 3, 3, linewidth=1, edgecolor='r', facecolor='none'))

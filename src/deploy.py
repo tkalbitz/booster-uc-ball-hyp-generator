@@ -75,7 +75,7 @@ shutil.copy(weight_file, model_file)
 dummy_input = torch.randn(1, 3, patch_height, patch_width)
 onnx_path = deploy_dir + "/" + detector_name + ".onnx"
 
-torch.onnx.export(model, dummy_input, onnx_path,
+torch.onnx.export(model, (dummy_input,), onnx_path,
                   export_params=True,
                   opset_version=11,
                   do_constant_folding=True,

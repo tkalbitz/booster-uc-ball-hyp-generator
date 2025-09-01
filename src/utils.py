@@ -1,5 +1,5 @@
 import torch
-from torchprofile import profile_macs
+from torchprofile import profile_macs  # type: ignore[import-untyped]
 from torch import nn
 
 

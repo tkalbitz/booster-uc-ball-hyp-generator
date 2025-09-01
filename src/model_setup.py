@@ -32,8 +32,8 @@ class DistanceLoss(nn.Module):
         return x + torch.nn.functional.softplus(-2. * x) - torch.log(torch.tensor(2.))
     
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
-        y_t = torch.stack([unscale_x(y_true[:,0]), unscale_y(y_true[:,1])], dim=1)
-        y_p = torch.stack([unscale_x(y_pred[:,0]), unscale_y(y_pred[:,1])], dim=1)
+        y_t = torch.stack([torch.as_tensor(unscale_x(y_true[:,0])), torch.as_tensor(unscale_y(y_true[:,1]))], dim=1)
+        y_p = torch.stack([torch.as_tensor(unscale_x(y_pred[:,0])), torch.as_tensor(unscale_y(y_pred[:,1]))], dim=1)
         
         r = self._logcosh(y_p - y_t)
         e = torch.exp(3. / y_true[:,2])

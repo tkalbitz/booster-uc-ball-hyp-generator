@@ -100,7 +100,9 @@ def evaluate_model_accuracy(
             distance_errors.append(distance)
             
             found = distance < radius
-            found_ball_metric.update(found, 1)
+            if found:
+                found_ball_metric.found_balls += 1
+            found_ball_metric.totals_balls += 1
             
             total_samples += 1
             if total_samples >= num_samples:

@@ -26,26 +26,33 @@ ds = create_dataset(test_img, test_labels, batch_size, trainset=False)
 model_file = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-21-17-24-53/weights.acc.268-0.964466.h5"
 
 model = models.create_network_v2(patch_height, patch_width)
-model.load_weights(model_file)
+model.load_state_dict(torch.load(model_file, map_location=device))
+model.to(device)
+model.eval()
 
 ball_sum = 0
 it = iter(ds)
 
 for s in range(steps):
     image_batch, label_batch = next(it)
+    
+    # Convert to tensors and move to device
+    image_batch = image_batch.to(device)
+    label_batch = label_batch.to(device)
 
-    pred = model.predict_on_batch(image_batch)
+    with torch.no_grad():
+        pred = model(image_batch)
 
-    x_t = unscale_x(label_batch[:,0]) + patch_width / 2
-    y_t = unscale_y(label_batch[:,1]) + patch_height / 2
+    x_t = torch.tensor(unscale_x(label_batch[:,0])) + patch_width / 2
+    y_t = torch.tensor(unscale_y(label_batch[:,1])) + patch_height / 2
 
-    x_p = unscale_x(pred[:,0]) + patch_width / 2
-    y_p = unscale_y(pred[:,1]) + patch_height / 2
+    x_p = torch.tensor(unscale_x(pred[:,0])) + patch_width / 2
+    y_p = torch.tensor(unscale_y(pred[:,1])) + patch_height / 2
 
     d = torch.sqrt((x_t - x_p)**2 + (y_t - y_p)**2)
     r = d < label_batch[:,2]
     cur_sum = torch.sum(r.int())
-    ball_sum += cur_sum
+    ball_sum += int(cur_sum.item())
 
 
 print(f"Found in total {ball_sum} / {steps * batch_size}")

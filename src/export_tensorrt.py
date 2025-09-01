@@ -3,12 +3,12 @@
 
 import sys
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Any
 
 import torch
-import tensorrt as trt
+import tensorrt as trt  # type: ignore[import-untyped]
 import numpy as np
-from torch2trt import torch2trt
+from torch2trt import torch2trt  # type: ignore[import-not-found]
 
 import models
 from config import patch_height, patch_width, image_dir, testset_csv_collection
@@ -55,13 +55,13 @@ class Int8Calibrator(trt.IInt8EntropyCalibrator2):
             batch_np = batch.cpu().numpy().astype(np.float32)
             
             if self.device_input is None:
-                import pycuda.driver as cuda
+                import pycuda.driver as cuda  # type: ignore[import-not-found]
                 self.device_input = cuda.mem_alloc(batch_np.nbytes)
             
-            import pycuda.driver as cuda
+            import pycuda.driver as cuda  # type: ignore[import-not-found]
             cuda.memcpy_htod(self.device_input, batch_np.ravel())
             
-            return [int(self.device_input)]
+            return [int(self.device_input)] if self.device_input is not None else None
         except StopIteration:
             return None
             
@@ -146,7 +146,7 @@ def create_tensorrt_engine(
     print(f"Using INT8: {int8}")
     print(f"Max batch size: {max_batch_size}")
     
-    conversion_kwargs = {
+    conversion_kwargs: dict[str, Any] = {
         "fp16_mode": fp16,
         "max_batch_size": max_batch_size
     }
