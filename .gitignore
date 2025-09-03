@@ -12,3 +12,7 @@ wheels/
 # AI slob
 CLAUDE.md
 .claude
+
+# Model and logging
+model/
+logs/
