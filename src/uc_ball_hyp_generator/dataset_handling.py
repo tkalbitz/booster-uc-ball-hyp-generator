@@ -1,3 +1,5 @@
+import multiprocessing
+
 import numpy as np
 import numpy.typing as npt
 import torch
@@ -241,7 +243,7 @@ def create_dataset(
         dataset,
         batch_size=batch_size,
         shuffle=trainset,
-        num_workers=2,
+        num_workers=multiprocessing.cpu_count() // 2,
         pin_memory=True,
         persistent_workers=True if len(images) > 100 else False,
     )
@@ -305,7 +307,7 @@ def create_dataset_image_based(
         dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=2,
+        num_workers=multiprocessing.cpu_count() // 2,
         pin_memory=True,
         collate_fn=patch_collate_fn,
         persistent_workers=True if len(images) > 100 else False,
@@ -403,6 +405,13 @@ def show_dataset(ds: DataLoader) -> None:
     plt.waitforbuttonpress()
     plt.close()
     plt.waitforbuttonpress()
+    plt.close()
+    plt.waitforbuttonpress()
+    plt.close()
+    plt.waitforbuttonpress()
+    plt.close()
+    plt.waitforbuttonpress()
+    plt.close()
     plt.close()
     plt.waitforbuttonpress()
     plt.close()
