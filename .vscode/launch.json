@@ -12,7 +12,7 @@
             "console": "integratedTerminal"
         },
         {
-            "name": "Python Debugger: Current File",
+            "name": "Python Debugger: main.py",
             "type": "debugpy",
             "request": "launch",
             "program": "src/uc_ball_hyp_generator/main.py",
