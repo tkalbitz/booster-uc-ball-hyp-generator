@@ -5,6 +5,7 @@ import torchvision.transforms as transforms  # type: ignore[import-untyped]
 from matplotlib import pyplot as plt
 from matplotlib.patches import Ellipse
 from PIL import Image
+from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
 from uc_ball_hyp_generator.config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
@@ -18,7 +19,7 @@ def downsample_by_averaging(img: npt.NDArray[np.float32], scale: tuple[int, int]
     return img.reshape(new_h, scale[0], new_w, scale[1], c).mean(axis=(1, 3))
 
 
-def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[torch.Tensor, torch.Tensor]:
+def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[Tensor, Tensor]:
     """Load and process an image with its label using torchvision transforms, keeping CHW format."""
     # Create transforms pipeline for efficient preprocessing
     transform = transforms.Compose(
@@ -29,9 +30,9 @@ def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[torch.Tenso
     )
 
     pil_image = Image.open(path).convert("RGB")
-    image_tensor = transform(pil_image)  # Keep in CHW format - no permutation needed!
+    image_tensor: Tensor = transform(pil_image)  # Keep in CHW format - no permutation needed!
 
-    label_tensor = torch.tensor(label, dtype=torch.float32)
+    label_tensor = Tensor(label, dtype=torch.float32)
 
     center_x = ((label_tensor[2] + label_tensor[0]) / 2.0) / scale_factor_f
     center_y = ((label_tensor[3] + label_tensor[1]) / 2.0) / scale_factor_f
@@ -40,17 +41,12 @@ def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[torch.Tenso
     dy = label_tensor[3] - label_tensor[1]
     d = torch.sqrt(dx * dx + dy * dy) / scale_factor_f
 
-    final_label = torch.tensor([center_x, center_y, d])
+    final_label = Tensor([center_x, center_y, d])
 
     return image_tensor, final_label
 
 
-# Set random seed for reproducibility
-torch.manual_seed(1)
-np.random.seed(1)
-
-
-def crop_image_by_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def crop_image_by_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """Crop image to patch containing the ball center, working with CHW format."""
     cx = label[0]
     cy = label[1]
@@ -69,12 +65,12 @@ def crop_image_by_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch
 
     # Work with CHW format: image shape is (C, H, W)
     cropped_image = image[:, start_y:end_y, start_x:end_x]
-    adjusted_label = torch.tensor([cx - float(start_x), cy - float(start_y), d])
+    adjusted_label = Tensor([cx - float(start_x), cy - float(start_y), d])
 
     return cropped_image, adjusted_label
 
 
-def _calculate_random_crop_bounds(cx: torch.Tensor, cy: torch.Tensor, d: torch.Tensor) -> tuple[int, int]:
+def _calculate_random_crop_bounds(cx: Tensor, cy: Tensor, d: Tensor) -> tuple[int, int]:
     """Calculate random crop position bounds to keep ball visible."""
     offset = d * 0.05
 
@@ -110,7 +106,7 @@ def _adjust_crop_bounds(start_x: int, start_y: int) -> tuple[int, int, int, int]
     return start_x, start_y, end_x, end_y
 
 
-def crop_image_random_with_ball(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def crop_image_random_with_ball(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """Randomly crop image patch ensuring ball remains visible, working with CHW format."""
     cx, cy, d = label[0], label[1], label[2]
 
@@ -119,12 +115,12 @@ def crop_image_random_with_ball(image: torch.Tensor, label: torch.Tensor) -> tup
 
     # Work with CHW format: image shape is (C, H, W)
     cropped_image = image[:, start_y:end_y, start_x:end_x]
-    adjusted_label = torch.tensor([cx - float(start_x), cy - float(start_y), d])
+    adjusted_label = Tensor([cx - float(start_x), cy - float(start_y), d])
 
     return cropped_image, adjusted_label
 
 
-def patchify_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def patchify_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """Split image into patches with adjusted labels using vectorized operations."""
     cx, cy, d = label[0], label[1], label[2]
 
@@ -157,14 +153,14 @@ def patchify_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tens
     return patches, labels
 
 
-def train_augment_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def train_augment_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """Apply training augmentations to image and label, working with CHW format."""
     r = torch.rand(1).item()
 
     if r < 0.5:
         # Horizontal flip - flip along width dimension (dim=2 for CHW)
         image = torch.flip(image, dims=[2])
-        label = torch.tensor([patch_width - label[0], label[1], label[2]])
+        label = Tensor([patch_width - label[0], label[1], label[2]])
 
     # Random brightness adjustment
     brightness_factor = 1.0 + (torch.rand(1).item() - 0.5) * 0.3  # ±0.15 range
@@ -178,7 +174,7 @@ def train_augment_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch
     return yuv_chw, label
 
 
-def test_augment_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def test_augment_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """Apply test augmentations (RGB to YUV conversion only), working with CHW format."""
     # Convert to YUV - need HWC format temporarily for color conversion
     image_hwc = image.permute(1, 2, 0)  # CHW to HWC for color conversion
@@ -188,15 +184,15 @@ def test_augment_image(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.
     return yuv_chw, label
 
 
-def final_adjustments(image: torch.Tensor, label: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def final_adjustments(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """Apply final scaling adjustments, keeping CHW format."""
     x = scale_x(label[0] - patch_width / 2)
     y = scale_y(label[1] - patch_height / 2)
 
-    return image / 255.0, torch.tensor([x, y, label[2]])
+    return image / 255.0, Tensor([x, y, label[2]])
 
 
-def final_adjustments_patches(image: torch.Tensor, labels: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def final_adjustments_patches(image: Tensor, labels: Tensor) -> tuple[Tensor, Tensor]:
     """Apply final scaling adjustments for patch-based processing."""
     x = scale_x(labels[:, 0] - patch_width / 2)
     y = scale_y(labels[:, 1] - patch_height / 2)
@@ -217,7 +213,7 @@ class BallDataset(Dataset):
     def __len__(self) -> int:
         return len(self.images)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> tuple[Tensor, Tensor]:
         image_path = self.images[idx]
         label_tuple = self.labels[idx]
 
@@ -238,10 +234,10 @@ class BallDataset(Dataset):
 
 def create_dataset(
     images: list[str], labels: list[tuple[int, int, int, int]], batch_size: int, trainset: bool = True
-) -> DataLoader:
+) -> DataLoader[tuple[Tensor, Tensor]]:
     """Create PyTorch DataLoader for the dataset."""
-    dataset = BallDataset(images, labels, trainset)
-    return DataLoader(
+    dataset: Dataset[tuple[Tensor, Tensor]] = BallDataset(images, labels, trainset)
+    return DataLoader[tuple[Tensor, Tensor]](
         dataset,
         batch_size=batch_size,
         shuffle=trainset,
@@ -251,7 +247,7 @@ def create_dataset(
     )
 
 
-class BallPatchDataset(Dataset):
+class BallPatchDataset(Dataset[tuple[Tensor, Tensor]]):
     """PyTorch dataset for patch-based ball detection."""
 
     def __init__(self, images: list[str], labels: list[tuple[int, int, int, int]]) -> None:
@@ -261,7 +257,7 @@ class BallPatchDataset(Dataset):
     def __len__(self) -> int:
         return len(self.images)
 
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, torch.Tensor]:
+    def __getitem__(self, idx: int) -> tuple[Tensor, Tensor]:
         image_path = self.images[idx]
         label_tuple = self.labels[idx]
 
@@ -284,10 +280,10 @@ class BallPatchDataset(Dataset):
         return augmented_patches_final, final_labels
 
 
-def patch_collate_fn(batch: list[tuple[torch.Tensor, torch.Tensor]]) -> tuple[torch.Tensor, torch.Tensor]:
+def patch_collate_fn(batch: list[tuple[Tensor, Tensor]]) -> tuple[Tensor, Tensor]:
     """Custom collate function for patch-based dataset to handle variable patch counts."""
-    all_patches = []
-    all_labels = []
+    all_patches: list[Tensor] = []
+    all_labels: list[Tensor] = []
 
     for patches, labels in batch:
         all_patches.append(patches)
@@ -302,7 +298,7 @@ def patch_collate_fn(batch: list[tuple[torch.Tensor, torch.Tensor]]) -> tuple[to
 
 def create_dataset_image_based(
     images: list[str], labels: list[tuple[int, int, int, int]], batch_size: int
-) -> DataLoader:
+) -> DataLoader[tuple[Tensor, Tensor]]:
     """Create PyTorch DataLoader for patch-based dataset."""
     dataset = BallPatchDataset(images, labels)
     return DataLoader(
@@ -317,11 +313,11 @@ def create_dataset_image_based(
 
 
 # Pre-computed transformation matrices as constants
-RGB_TO_YUV_MATRIX = torch.tensor(
+RGB_TO_YUV_MATRIX = Tensor(
     [[0.299, -0.169, 0.498], [0.587, -0.331, -0.419], [0.114, 0.499, -0.0813]], dtype=torch.float32
 )
 
-YUV_TO_RGB_MATRIX = torch.tensor(
+YUV_TO_RGB_MATRIX = Tensor(
     [
         [1.0, 1.0, 1.0],
         [-0.000007154783816076815, -0.3441331386566162, 1.7720025777816772],
@@ -330,11 +326,11 @@ YUV_TO_RGB_MATRIX = torch.tensor(
     dtype=torch.float32,
 )
 
-YUV_BIAS = torch.tensor([0, 128, 128], dtype=torch.float32)
-RGB_BIAS = torch.tensor([-179.45477266423404, 135.45870971679688, -226.8183044444304], dtype=torch.float32)
+YUV_BIAS = Tensor([0, 128, 128], dtype=torch.float32)
+RGB_BIAS = Tensor([-179.45477266423404, 135.45870971679688, -226.8183044444304], dtype=torch.float32)
 
 
-def rgb2yuv_optimized(rgb: torch.Tensor) -> torch.Tensor:
+def rgb2yuv_optimized(rgb: Tensor) -> Tensor:
     """Optimized RGB to YUV color space conversion."""
     device = rgb.device
     dtype = rgb.dtype
@@ -354,7 +350,7 @@ def rgb2yuv_optimized(rgb: torch.Tensor) -> torch.Tensor:
     return yuv
 
 
-def yuv2rgb_optimized(yuv: torch.Tensor) -> torch.Tensor:
+def yuv2rgb_optimized(yuv: Tensor) -> Tensor:
     """Optimized YUV to RGB color space conversion."""
     device = yuv.device
     dtype = yuv.dtype
@@ -374,12 +370,12 @@ def yuv2rgb_optimized(yuv: torch.Tensor) -> torch.Tensor:
 
 
 # Backward compatibility aliases - gradually migrate to optimized versions
-def rgb2yuv(rgb: torch.Tensor) -> torch.Tensor:
+def rgb2yuv(rgb: Tensor) -> Tensor:
     """Convert RGB to YUV color space (backward compatibility wrapper)."""
     return rgb2yuv_optimized(rgb)
 
 
-def yuv2rgb(yuv: torch.Tensor) -> torch.Tensor:
+def yuv2rgb(yuv: Tensor) -> Tensor:
     """Convert YUV to RGB color space (backward compatibility wrapper)."""
     return yuv2rgb_optimized(yuv)
 
@@ -404,7 +400,13 @@ def show_dataset(ds: DataLoader) -> None:
 
     plt.waitforbuttonpress()
     plt.close()
+    plt.waitforbuttonpress()
     plt.close()
+    plt.waitforbuttonpress()
     plt.close()
+    plt.waitforbuttonpress()
     plt.close()
+    plt.waitforbuttonpress()
+    plt.close()
+    plt.waitforbuttonpress()
     plt.close()

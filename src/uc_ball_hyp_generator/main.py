@@ -1,5 +1,6 @@
 """Main training script for ball detection model."""
 
+import numpy as np
 import torch
 
 import uc_ball_hyp_generator.training as training
@@ -14,6 +15,10 @@ from uc_ball_hyp_generator.training import run_training_loop
 def main() -> None:
     """Main training function."""
     _logger = setup_logger(__name__)
+
+    # Set random seed for reproducibility
+    torch.manual_seed(1)
+    np.random.seed(1)
 
     device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     _logger.info("Using device: %s", device)
@@ -47,9 +52,5 @@ def main() -> None:
     run_training_loop(model, train_ds, test_ds, optimizer, criterion, scheduler, writer, csv_file, model_dir, device)
 
 
-if __name__ == "__main__":
-    main()
-if __name__ == "__main__":
-    main()
 if __name__ == "__main__":
     main()
