@@ -20,7 +20,11 @@ def main() -> None:
     torch.manual_seed(1)
     np.random.seed(1)
 
-    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device: torch.device = torch.device("cpu")
+    if torch.cuda.is_available():
+        torch.set_float32_matmul_precision("high")
+        device = torch.device("cuda")
+
     _logger.info("Using device: %s", device)
 
     batch_size_train: int = 64
@@ -52,5 +56,7 @@ def main() -> None:
     run_training_loop(model, train_ds, test_ds, optimizer, criterion, scheduler, writer, csv_file, model_dir, device)
 
 
+if __name__ == "__main__":
+    main()
 if __name__ == "__main__":
     main()
