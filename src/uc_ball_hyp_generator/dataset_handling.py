@@ -32,7 +32,7 @@ def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[Tensor, Ten
     pil_image = Image.open(path).convert("RGB")
     image_tensor: Tensor = transform(pil_image)  # Keep in CHW format - no permutation needed!
 
-    label_tensor = Tensor(label, dtype=torch.float32)
+    label_tensor = torch.tensor(label, dtype=torch.float32)
 
     center_x = ((label_tensor[2] + label_tensor[0]) / 2.0) / scale_factor_f
     center_y = ((label_tensor[3] + label_tensor[1]) / 2.0) / scale_factor_f
@@ -41,7 +41,7 @@ def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[Tensor, Ten
     dy = label_tensor[3] - label_tensor[1]
     d = torch.sqrt(dx * dx + dy * dy) / scale_factor_f
 
-    final_label = Tensor([center_x, center_y, d])
+    final_label = torch.tensor([center_x, center_y, d])
 
     return image_tensor, final_label
 
@@ -65,7 +65,7 @@ def crop_image_by_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
 
     # Work with CHW format: image shape is (C, H, W)
     cropped_image = image[:, start_y:end_y, start_x:end_x]
-    adjusted_label = Tensor([cx - float(start_x), cy - float(start_y), d])
+    adjusted_label = torch.tensor([cx - float(start_x), cy - float(start_y), d])
 
     return cropped_image, adjusted_label
 
@@ -115,7 +115,7 @@ def crop_image_random_with_ball(image: Tensor, label: Tensor) -> tuple[Tensor, T
 
     # Work with CHW format: image shape is (C, H, W)
     cropped_image = image[:, start_y:end_y, start_x:end_x]
-    adjusted_label = Tensor([cx - float(start_x), cy - float(start_y), d])
+    adjusted_label = torch.tensor([cx - float(start_x), cy - float(start_y), d])
 
     return cropped_image, adjusted_label
 
@@ -160,7 +160,7 @@ def train_augment_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     if r < 0.5:
         # Horizontal flip - flip along width dimension (dim=2 for CHW)
         image = torch.flip(image, dims=[2])
-        label = Tensor([patch_width - label[0], label[1], label[2]])
+        label = torch.tensor([patch_width - label[0], label[1], label[2]])
 
     # Random brightness adjustment
     brightness_factor = 1.0 + (torch.rand(1).item() - 0.5) * 0.3  # ±0.15 range
@@ -189,7 +189,7 @@ def final_adjustments(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     x = scale_x(label[0] - patch_width / 2)
     y = scale_y(label[1] - patch_height / 2)
 
-    return image / 255.0, Tensor([x, y, label[2]])
+    return image / 255.0, torch.tensor([x, y, label[2]])
 
 
 def final_adjustments_patches(image: Tensor, labels: Tensor) -> tuple[Tensor, Tensor]:
@@ -313,11 +313,11 @@ def create_dataset_image_based(
 
 
 # Pre-computed transformation matrices as constants
-RGB_TO_YUV_MATRIX = Tensor(
+RGB_TO_YUV_MATRIX = torch.tensor(
     [[0.299, -0.169, 0.498], [0.587, -0.331, -0.419], [0.114, 0.499, -0.0813]], dtype=torch.float32
 )
 
-YUV_TO_RGB_MATRIX = Tensor(
+YUV_TO_RGB_MATRIX = torch.tensor(
     [
         [1.0, 1.0, 1.0],
         [-0.000007154783816076815, -0.3441331386566162, 1.7720025777816772],
@@ -326,8 +326,8 @@ YUV_TO_RGB_MATRIX = Tensor(
     dtype=torch.float32,
 )
 
-YUV_BIAS = Tensor([0, 128, 128], dtype=torch.float32)
-RGB_BIAS = Tensor([-179.45477266423404, 135.45870971679688, -226.8183044444304], dtype=torch.float32)
+YUV_BIAS = torch.tensor([0, 128, 128], dtype=torch.float32)
+RGB_BIAS = torch.tensor([-179.45477266423404, 135.45870971679688, -226.8183044444304], dtype=torch.float32)
 
 
 def rgb2yuv_optimized(rgb: Tensor) -> Tensor:
