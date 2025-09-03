@@ -58,18 +58,18 @@ class BigLittleReduction(nn.Module):
         conv1_out = self.conv1_3x3(x)
         conv2_out = self.conv2_3x3(x)
         conv2_out = self.avg_pool(conv2_out)
-        
+
         # Ensure both tensors have the same spatial dimensions for concatenation
         target_h, target_w = conv1_out.shape[2], conv1_out.shape[3]
         current_h, current_w = conv2_out.shape[2], conv2_out.shape[3]
-        
+
         # Pad conv2_out if necessary to match conv1_out dimensions
         if current_h != target_h or current_w != target_w:
             pad_h = max(0, target_h - current_h)
             pad_w = max(0, target_w - current_w)
             # Pad format: (pad_left, pad_right, pad_top, pad_bottom)
-            conv2_out = F.pad(conv2_out, (0, pad_w, 0, pad_h), mode='constant', value=0)
-        
+            conv2_out = F.pad(conv2_out, (0, pad_w, 0, pad_h), mode="constant", value=0)
+
         return torch.cat([conv1_out, conv2_out], dim=1)
 
 
@@ -107,7 +107,7 @@ class NetworkV2(nn.Module):
                 nn.Sequential(BigLittleReduction(8, 10, "relu"), nn.Dropout(0.2)),
                 nn.Sequential(BigLittleReduction(15, 12, "relu"), SEBlock(18), nn.Dropout(0.1)),
                 nn.Sequential(BigLittleReduction(18, 12, "relu"), SEBlock(18), nn.Dropout(0.1)),
-                nn.Sequential(BigLittleReduction(18, 14, "relu"), SEBlock(21), nn.Dropout(0.1)),
+                # nn.Sequential(BigLittleReduction(18, 14, "relu"), SEBlock(21), nn.Dropout(0.1)),
             ]
         )
 
@@ -115,7 +115,7 @@ class NetworkV2(nn.Module):
         self.global_pool = nn.AdaptiveAvgPool2d(1)  # Always outputs (B, C, 1, 1)
 
         # Modern classification head - only need to know final channel count
-        final_channels = 21  # Output channels from last feature block
+        final_channels = 18  # Output channels from last feature block
         self.classifier = nn.Sequential(
             nn.Flatten(),  # (B, C, 1, 1) -> (B, C)
             nn.Linear(final_channels, 64),  # Slightly larger intermediate layer

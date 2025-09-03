@@ -14,6 +14,7 @@ dependencies = [
     "numpy>=1.21.0",
     "tensorboard>=2.0.0",
     "tensorrt>=8.0.0",
+    "torchinfo>=1.8.0",
 ]
 
 [dependency-groups]
@@ -24,6 +25,9 @@ addopts = ["--import-mode=importlib"]
 
 [tool.ruff]
 line-length = 120
+
+[tool.uv]
+package = true
 
 [[tool.uv.index]]
 name = "pytorch-cpu"
