@@ -47,7 +47,7 @@ class BigLittleReduction(nn.Module):
     def __init__(self, in_channels: int, filter_count: int, activation: str = "relu") -> None:
         super().__init__()
         self.conv1_3x3 = Conv2dBn(
-            in_channels, filter_count // 2, kernel_size=3, stride=(2, 2), padding="valid", activation=activation
+            in_channels, filter_count // 2, kernel_size=3, stride=(2, 2), padding=1, activation=activation
         )
         self.conv2_3x3 = Conv2dBn(
             in_channels, filter_count, kernel_size=3, stride=1, padding="valid", activation=activation
