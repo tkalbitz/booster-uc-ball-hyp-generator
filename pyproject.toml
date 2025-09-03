@@ -33,3 +33,6 @@ explicit = true
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu" }]
 torchvision = [{ index = "pytorch-cpu" }]
+
+[tool.mypy]
+exclude = ["^model/$", '^logs/$']
