@@ -118,11 +118,7 @@ class NetworkV2(nn.Module):
         final_channels = 18  # Output channels from last feature block
         self.classifier = nn.Sequential(
             nn.Flatten(),  # (B, C, 1, 1) -> (B, C)
-            nn.Linear(final_channels, 64),  # Slightly larger intermediate layer
-            nn.BatchNorm1d(64),
-            nn.ReLU(),
-            nn.Dropout(0.2),  # Added dropout for better generalization
-            nn.Linear(64, 32),
+            nn.Linear(final_channels, 32),  # Slightly larger intermediate layer
             nn.BatchNorm1d(32),
             nn.ReLU(),
             nn.Linear(32, num_classes),
