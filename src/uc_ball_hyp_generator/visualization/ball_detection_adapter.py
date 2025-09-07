@@ -7,6 +7,7 @@ with ball detection annotations using EllipseShape.
 
 import logging
 import os
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -31,6 +32,15 @@ _logger = logging.getLogger(__name__)
 _model = None
 _device = None
 _model_path = None
+
+
+@dataclass
+class PreprocessedImage:
+    """Container for preprocessed image data with patches and metadata."""
+    
+    patch_batch: torch.Tensor  # (num_patches, C, H, W) tensor of all image patches
+    original_size: tuple[int, int]  # (width, height) of original image
+    patch_positions: list[tuple[int, int]]  # List of (start_x, start_y) for each patch
 
 
 def _get_model_path() -> str:
@@ -88,7 +98,7 @@ def _load_model() -> tuple[torch.nn.Module, torch.device]:
     return _model, _device
 
 
-def _preprocess_image(image_path: str) -> tuple[torch.Tensor, tuple[int, int]]:
+def _preprocess_image(image_path: str) -> PreprocessedImage:
     """Load and preprocess image for model inference, splitting into patches."""
     # Load and resize image as done in training
     pil_image = Image.open(image_path).convert("RGB")
@@ -133,19 +143,21 @@ def _preprocess_image(image_path: str) -> tuple[torch.Tensor, tuple[int, int]]:
     # Stack all patches into a batch
     patch_batch = torch.stack(patches)  # (num_patches, C, H, W)
 
-    return patch_batch, original_size, patch_positions
+    return PreprocessedImage(
+        patch_batch=patch_batch,
+        original_size=original_size,
+        patch_positions=patch_positions
+    )
 
 
-def _postprocess_predictions(
-    predictions: torch.Tensor, original_size: tuple[int, int], patch_positions: list[tuple[int, int]]
-) -> list[Annotation]:
+def _postprocess_predictions(predictions: torch.Tensor, preprocessed: PreprocessedImage) -> list[Annotation]:
     """Convert model predictions to visualization annotations."""
     annotations = []
 
     # Filter predictions to only include likely ball detections
     # We'll use a threshold approach - only show patches where the model is confident
     for i, (pred_x, pred_y) in enumerate(predictions):
-        patch_start_x, patch_start_y = patch_positions[i]
+        patch_start_x, patch_start_y = preprocessed.patch_positions[i]
 
         # Unscale the coordinates (convert from model output space to patch coordinates)
         ball_x_patch = float(unscale_x(pred_x.item()))
@@ -160,8 +172,8 @@ def _postprocess_predictions(
         ball_y_orig = ball_y_scaled * scale_factor_f
 
         # Convert to relative coordinates (0-1) for the visualizer
-        rel_x = ball_x_orig / original_size[0]  # width
-        rel_y = ball_y_orig / original_size[1]  # height
+        rel_x = ball_x_orig / preprocessed.original_size[0]  # width
+        rel_y = ball_y_orig / preprocessed.original_size[1]  # height
 
         # Clamp to valid range
         rel_x = max(0.0, min(1.0, rel_x))
@@ -221,15 +233,15 @@ def adapter(image_paths: list[str]) -> list[VisualizationResult]:
             _logger.debug("Processing image: %s", image_path)
 
             # Preprocess image into patches
-            patch_batch, original_size, patch_positions = _preprocess_image(image_path)
-            patch_batch = patch_batch.to(device)
+            preprocessed = _preprocess_image(image_path)
+            patch_batch = preprocessed.patch_batch.to(device)
 
             # Run inference on all patches
             with torch.no_grad():
                 predictions = model(patch_batch)
 
             # Postprocess predictions to annotations
-            annotations = _postprocess_predictions(predictions, original_size, patch_positions)
+            annotations = _postprocess_predictions(predictions, preprocessed)
 
             result = VisualizationResult(
                 image_path=Path(image_path).resolve(), annotations=annotations, result_image=None

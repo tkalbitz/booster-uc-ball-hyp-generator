@@ -495,8 +495,8 @@ wheels = [
 
 [[package]]
 name = "naoteamhtwk-machinelearning-visualizer"
-version = "0.2.0"
-source = { git = "ssh://git@github.com/tkalbitz/naoteam-machine-learning-visualizer.git#b744aac099ea112c829d31334319eccbc1457345" }
+version = "0.2.1"
+source = { git = "ssh://git@github.com/tkalbitz/naoteam-machine-learning-visualizer.git#47c1ca94cd8c4b6d9ce7056f0559026ab1c51441" }
 dependencies = [
     { name = "numpy" },
     { name = "opencv-python" },

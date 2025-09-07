@@ -15,7 +15,7 @@ dependencies = [
     "tensorboard>=2.0.0",
     "tensorrt>=8.0.0",
     "torchinfo>=1.8.0",
-    "naoteamhtwk_machinelearning_visualizer>=0.2.0",
+    "naoteamhtwk_machinelearning_visualizer>=0.2.1",
 ]
 
 [dependency-groups]
