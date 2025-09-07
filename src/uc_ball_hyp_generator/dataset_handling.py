@@ -10,7 +10,7 @@ from PIL import Image
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
-from uc_ball_hyp_generator.color_conversion import rgb2yuv_normalized
+from uc_ball_hyp_generator.color_conversion import rgb2yuv_chw_normalized
 from uc_ball_hyp_generator.config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
 from uc_ball_hyp_generator.scale import scale_x, scale_y
 
@@ -124,7 +124,11 @@ def crop_image_random_with_ball(image: Tensor, label: Tensor) -> tuple[Tensor, T
 
 
 def patchify_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
-    """Split image into patches with adjusted labels using vectorized operations."""
+    """Split image into patches with adjusted labels using vectorized operations.
+    
+    LEGACY function for HWC processing - kept for backward compatibility.
+    New code should use patchify_image_chw() for better performance.
+    """
     cx, cy, d = label[0], label[1], label[2]
 
     patches_y = image.shape[0] // patch_height
@@ -156,6 +160,50 @@ def patchify_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     return patches, labels
 
 
+def patchify_image_chw(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
+    """OPTIMIZED: Split CHW image into NCHW patches, eliminating permutations.
+    
+    Args:
+        image: CHW format tensor (C, H, W)
+        label: Label tensor (cx, cy, d)
+        
+    Returns:
+        patches: NCHW format tensor (num_patches, C, patch_H, patch_W)
+        labels: Adjusted labels tensor (num_patches, 3)
+    """
+    cx, cy, d = label[0], label[1], label[2]
+    
+    # Image is in CHW format: (C, H, W)
+    patches_y = image.shape[1] // patch_height  # H dimension
+    patches_x = image.shape[2] // patch_width   # W dimension
+    
+    # Use unfold to extract patches in CHW format
+    # unfold on H dimension (dim=1), then W dimension (dim=2)
+    patches = image.unfold(1, patch_height, patch_height).unfold(2, patch_width, patch_width)
+    # patches shape: (C, patches_y, patches_x, patch_height, patch_width)
+    
+    # Reshape to (num_patches, C, patch_height, patch_width) - NCHW format
+    patches = patches.permute(1, 2, 0, 3, 4).contiguous().view(-1, image.shape[0], patch_height, patch_width)
+    
+    # Create coordinate grids for vectorized label computation  
+    y_coords = torch.arange(patches_y, dtype=torch.float32) * patch_height
+    x_coords = torch.arange(patches_x, dtype=torch.float32) * patch_width
+    
+    # Create meshgrid and flatten to match patch order
+    yy, xx = torch.meshgrid(y_coords, x_coords, indexing="ij")
+    xx_flat = xx.flatten()
+    yy_flat = yy.flatten()
+    
+    # Vectorized label adjustment
+    adjusted_cx = cx - xx_flat
+    adjusted_cy = cy - yy_flat
+    d_repeated = d.expand(len(xx_flat))
+    
+    labels = torch.stack([adjusted_cx, adjusted_cy, d_repeated], dim=1)
+    
+    return patches, labels
+
+
 def train_augment_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """Apply training augmentations to image and label, working with CHW format."""
     r = torch.rand(1).item()
@@ -169,20 +217,16 @@ def train_augment_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     brightness_factor = 1.0 + (torch.rand(1).item() - 0.5) * 0.3  # ±0.15 range
     image = torch.clamp(image * brightness_factor, 0, 1)
 
-    # Convert to YUV - need HWC format temporarily for color conversion
-    image_hwc = image.permute(1, 2, 0)  # CHW to HWC for color conversion
-    yuv_hwc = rgb2yuv_normalized(image_hwc)  # Direct [0,1] range conversion
-    yuv_chw = yuv_hwc.permute(2, 0, 1)  # Back to CHW
+    # OPTIMIZED: Direct CHW color conversion - no permutations needed!
+    yuv_chw = rgb2yuv_chw_normalized(image)  # Direct CHW→CHW conversion
 
     return yuv_chw, label
 
 
 def test_augment_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """Apply test augmentations (RGB to YUV conversion only), working with CHW format."""
-    # Convert to YUV - need HWC format temporarily for color conversion
-    image_hwc = image.permute(1, 2, 0)  # CHW to HWC for color conversion
-    yuv_hwc = rgb2yuv_normalized(image_hwc)  # Direct [0,1] range conversion
-    yuv_chw = yuv_hwc.permute(2, 0, 1)  # Back to CHW
+    # OPTIMIZED: Direct CHW color conversion - no permutations needed!
+    yuv_chw = rgb2yuv_chw_normalized(image)  # Direct CHW→CHW conversion
 
     return yuv_chw, label
 
@@ -265,21 +309,18 @@ class BallPatchDataset(Dataset[tuple[Tensor, Tensor]]):
         label_tuple = self.labels[idx]
 
         image, label_tensor = load_image(image_path, label_tuple)
-        patches, patch_labels = patchify_image(image, label_tensor)
-
-        # Apply augmentations to all patches using vectorized operations
-        # patches shape: (num_patches, patch_height, patch_width, channels)
-
-        # Convert all patches to YUV color space in batch
-        augmented_patches = rgb2yuv_normalized(patches)  # Direct [0,1] range conversion
-
+        
+        # OPTIMIZED: Direct CHW patchification - no permutations!
+        patches, patch_labels = patchify_image_chw(image, label_tensor)  # CHW → NCHW
+        
+        # OPTIMIZED: Direct CHW color conversion - no permutations!
+        augmented_patches = rgb2yuv_chw_normalized(patches)  # NCHW → NCHW conversion
+        
         # Apply final adjustments using batch processing
         augmented_patches_normalized, final_labels = final_adjustments_patches(augmented_patches, patch_labels)
-
-        # Convert patches to CHW format
-        augmented_patches_final = augmented_patches_normalized.permute(0, 3, 1, 2)  # NHWC to NCHW
-
-        return augmented_patches_final, final_labels
+        
+        # Already in NCHW format - no permutation needed!
+        return augmented_patches_normalized, final_labels
 
 
 def patch_collate_fn(batch: list[tuple[Tensor, Tensor]]) -> tuple[Tensor, Tensor]:
