@@ -42,7 +42,7 @@ def main() -> None:
     # Set environment variable for the model path (required by adapter)
     os.environ["BALL_MODEL_PATH"] = str(model_file.resolve())
 
-    print(f"Launching ball detection visualizer...")
+    print("Launching ball detection visualizer...")
     print(f"Input directory: {input_path.resolve()}")
     print(f"Model file: {model_file.resolve()}")
 

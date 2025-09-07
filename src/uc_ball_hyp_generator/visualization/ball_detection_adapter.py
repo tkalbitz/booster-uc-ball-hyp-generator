@@ -20,7 +20,6 @@ from uc_ball_hyp_generator.config import (
     img_scaled_width,
     patch_height,
     patch_width,
-    scale_factor,
     scale_factor_f,
 )
 from uc_ball_hyp_generator.dataset_handling import rgb2yuv_optimized
