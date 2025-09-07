@@ -1,4 +1,7 @@
 import multiprocessing
+from pathlib import Path
+
+import blake3
 
 import numpy as np
 import numpy.typing as npt
@@ -18,6 +21,31 @@ from uc_ball_hyp_generator.scale import scale_x, scale_y
 type CropRegion = tuple[int, int, int, int]  # x_min, x_max, y_min, y_max
 _crop_region_cache: dict[tuple[float, float, float], CropRegion] = {}
 
+# Cache directory for preprocessed tensors
+_cache_dir = Path.home() / ".cache" / "uc_ball_hyp_generator" / "tensors"
+
+
+def _get_cache_key(image_path: str, img_height: int, img_width: int, label: tuple[int, int, int, int]) -> str:
+    """Generate cache key from image path, processing parameters, and label."""
+    cache_input = f"{image_path}_{img_height}_{img_width}_{label[0]}_{label[1]}_{label[2]}_{label[3]}"
+    return blake3.blake3(cache_input.encode()).hexdigest()
+
+
+def _get_cache_path(cache_key: str) -> Path:
+    """Get cache file path for given cache key."""
+    _cache_dir.mkdir(parents=True, exist_ok=True)
+    return _cache_dir / f"{cache_key}.pt"
+
+
+def _is_cache_valid(cache_path: Path, source_path: str) -> bool:
+    """Check if cached tensor is newer than source image."""
+    if not cache_path.exists():
+        return False
+
+    source_mtime = Path(source_path).stat().st_mtime
+    cache_mtime = cache_path.stat().st_mtime
+    return cache_mtime > source_mtime
+
 
 def downsample_by_averaging(img: npt.NDArray[np.float32], scale: tuple[int, int]) -> npt.NDArray[np.float32]:
     """Downsample image by averaging blocks."""
@@ -28,6 +56,16 @@ def downsample_by_averaging(img: npt.NDArray[np.float32], scale: tuple[int, int]
 
 def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[Tensor, Tensor]:
     """Load and process an image with its label using torchvision transforms, keeping CHW format."""
+    cache_key = _get_cache_key(path, img_scaled_height, img_scaled_width, label)
+    cache_path = _get_cache_path(cache_key)
+
+    if _is_cache_valid(cache_path, path):
+        try:
+            cached_data = torch.load(cache_path, weights_only=True)
+            return cached_data["image"], cached_data["processed_label"]
+        except (OSError, KeyError):
+            pass
+
     # Create transforms pipeline for efficient preprocessing
     transform = transforms.Compose(
         [
@@ -37,20 +75,22 @@ def load_image(path: str, label: tuple[int, int, int, int]) -> tuple[Tensor, Ten
     )
 
     pil_image = Image.open(path).convert("RGB")
-    image_tensor: Tensor = transform(pil_image)  # Keep in CHW format - no permutation needed!
+    processed_image: Tensor = transform(pil_image)  # Keep in CHW format - no permutation needed!
 
     label_tensor = torch.tensor(label, dtype=torch.float32)
-
     center_x = ((label_tensor[2] + label_tensor[0]) / 2.0) / scale_factor_f
     center_y = ((label_tensor[3] + label_tensor[1]) / 2.0) / scale_factor_f
-
     dx = label_tensor[2] - label_tensor[0]
     dy = label_tensor[3] - label_tensor[1]
     d = torch.sqrt(dx * dx + dy * dy) / scale_factor_f
-
     final_label = torch.tensor([center_x, center_y, d])
 
-    return image_tensor, final_label
+    try:
+        torch.save({"image": processed_image, "processed_label": final_label}, cache_path)
+    except OSError:
+        pass
+
+    return processed_image, final_label
 
 
 def crop_image_by_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
@@ -83,25 +123,25 @@ def _calculate_random_crop_bounds(cx: Tensor, cy: Tensor, d: Tensor) -> tuple[in
     offset = (d * 0.05).item()
     cx_val = cx.item()
     cy_val = cy.item()
-    
+
     # Calculate bounds with single operations and proper ordering
     x_min = max(int(cx_val + offset - patch_width), 0)
     x_max = max(int(cx_val - offset), 0)
-    y_min = max(int(cy_val + offset - patch_height), 0) 
+    y_min = max(int(cy_val + offset - patch_height), 0)
     y_max = max(int(cy_val - offset), 0)
-    
+
     # Ensure proper ordering (min <= max)
     if x_min > x_max:
         x_min, x_max = x_max, x_min
     if y_min > y_max:
         y_min, y_max = y_max, y_min
-        
+
     # Generate random coordinates with single torch operations when needed
     if x_min == x_max:
         x = x_min
     else:
         x = int(torch.randint(x_min, x_max + 1, (1,), dtype=torch.int32).item())
-        
+
     if y_min == y_max:
         y = y_min
     else:
@@ -119,42 +159,42 @@ def clear_crop_region_cache() -> None:
 def _get_or_calculate_crop_region(cx: float, cy: float, d: float) -> CropRegion:
     """Get pre-calculated crop region or calculate and cache it."""
     cache_key = (cx, cy, d)
-    
+
     if cache_key in _crop_region_cache:
         return _crop_region_cache[cache_key]
-    
+
     # Pre-calculate valid crop region bounds
     offset = d * 0.05
-    
+
     x_min = max(int(cx + offset - patch_width), 0)
     x_max = max(int(cx - offset), 0)
     y_min = max(int(cy + offset - patch_height), 0)
     y_max = max(int(cy - offset), 0)
-    
+
     # Ensure proper ordering
     if x_min > x_max:
         x_min, x_max = x_max, x_min
     if y_min > y_max:
         y_min, y_max = y_max, y_min
-        
+
     crop_region: CropRegion = (x_min, x_max, y_min, y_max)
     _crop_region_cache[cache_key] = crop_region
-    
+
     return crop_region
 
 
 def _calculate_random_crop_bounds_optimized(cx: Tensor, cy: Tensor, d: Tensor) -> tuple[int, int]:
     """Optimized version using pre-calculated crop regions."""
     cx_val = cx.item()
-    cy_val = cy.item() 
+    cy_val = cy.item()
     d_val = d.item()
-    
+
     x_min, x_max, y_min, y_max = _get_or_calculate_crop_region(cx_val, cy_val, d_val)
-    
+
     # Generate random coordinates with minimal operations
     x = x_min if x_min == x_max else int(torch.randint(x_min, x_max + 1, (1,), dtype=torch.int32).item())
     y = y_min if y_min == y_max else int(torch.randint(y_min, y_max + 1, (1,), dtype=torch.int32).item())
-    
+
     return x, y
 
 
