@@ -121,25 +121,25 @@ def yuv2rgb(yuv: Tensor) -> Tensor:
 
 def rgb2yuv_chw_normalized(rgb: Tensor) -> Tensor:
     """OPTIMIZED: Convert RGB to YUV for CHW format tensors, eliminating permutations.
-    
+
     Eliminates: CHW → HWC → color_convert() → HWC → CHW permutations
     Direct conversion: CHW → color_convert() → CHW
-    
+
     Args:
         rgb: RGB tensor in CHW format with values in [0,1] range
              Single image: (3, H, W) or Batch: (N, 3, H, W)
-    
+
     Returns:
         YUV tensor in CHW format ready for model input
     """
     device = rgb.device
     dtype = rgb.dtype
-    
+
     transform_matrix = RGB_TO_YUV_MATRIX.to(device=device, dtype=dtype)
     bias = YUV_BIAS.to(device=device, dtype=dtype)
-    
+
     rgb_scaled = rgb * 255.0
-    
+
     if len(rgb_scaled.shape) == 4:  # Batch: (N, 3, H, W)
         yuv = torch.einsum("nchw,kc->nkhw", rgb_scaled, transform_matrix)
         yuv = (yuv + bias.view(1, -1, 1, 1)) / 255.0  # Batch case: (1, 3, 1, 1)
@@ -153,12 +153,12 @@ def yuv2rgb_chw_normalized(yuv: Tensor) -> Tensor:
     """OPTIMIZED: Convert YUV to RGB for CHW format tensors, eliminating permutations."""
     device = yuv.device
     dtype = yuv.dtype
-    
+
     transform_matrix = YUV_TO_RGB_MATRIX.to(device=device, dtype=dtype)
     bias = RGB_BIAS.to(device=device, dtype=dtype)
-    
+
     yuv_scaled = yuv * 255.0
-    
+
     if len(yuv_scaled.shape) == 4:  # Batch: (N, 3, H, W)
         rgb = torch.einsum("nchw,kc->nkhw", yuv_scaled, transform_matrix)
         rgb = (rgb + bias.view(1, -1, 1, 1)) / 255.0  # Batch case: (1, 3, 1, 1)

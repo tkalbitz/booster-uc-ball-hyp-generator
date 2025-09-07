@@ -125,7 +125,7 @@ def crop_image_random_with_ball(image: Tensor, label: Tensor) -> tuple[Tensor, T
 
 def patchify_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """Split image into patches with adjusted labels using vectorized operations.
-    
+
     LEGACY function for HWC processing - kept for backward compatibility.
     New code should use patchify_image_chw() for better performance.
     """
@@ -162,45 +162,45 @@ def patchify_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
 
 def patchify_image_chw(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """OPTIMIZED: Split CHW image into NCHW patches, eliminating permutations.
-    
+
     Args:
         image: CHW format tensor (C, H, W)
         label: Label tensor (cx, cy, d)
-        
+
     Returns:
         patches: NCHW format tensor (num_patches, C, patch_H, patch_W)
         labels: Adjusted labels tensor (num_patches, 3)
     """
     cx, cy, d = label[0], label[1], label[2]
-    
+
     # Image is in CHW format: (C, H, W)
     patches_y = image.shape[1] // patch_height  # H dimension
-    patches_x = image.shape[2] // patch_width   # W dimension
-    
+    patches_x = image.shape[2] // patch_width  # W dimension
+
     # Use unfold to extract patches in CHW format
     # unfold on H dimension (dim=1), then W dimension (dim=2)
     patches = image.unfold(1, patch_height, patch_height).unfold(2, patch_width, patch_width)
     # patches shape: (C, patches_y, patches_x, patch_height, patch_width)
-    
+
     # Reshape to (num_patches, C, patch_height, patch_width) - NCHW format
     patches = patches.permute(1, 2, 0, 3, 4).contiguous().view(-1, image.shape[0], patch_height, patch_width)
-    
-    # Create coordinate grids for vectorized label computation  
+
+    # Create coordinate grids for vectorized label computation
     y_coords = torch.arange(patches_y, dtype=torch.float32) * patch_height
     x_coords = torch.arange(patches_x, dtype=torch.float32) * patch_width
-    
+
     # Create meshgrid and flatten to match patch order
     yy, xx = torch.meshgrid(y_coords, x_coords, indexing="ij")
     xx_flat = xx.flatten()
     yy_flat = yy.flatten()
-    
+
     # Vectorized label adjustment
     adjusted_cx = cx - xx_flat
     adjusted_cy = cy - yy_flat
     d_repeated = d.expand(len(xx_flat))
-    
+
     labels = torch.stack([adjusted_cx, adjusted_cy, d_repeated], dim=1)
-    
+
     return patches, labels
 
 
@@ -223,12 +223,149 @@ def train_augment_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     return yuv_chw, label
 
 
-def test_augment_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
+def augment_image_test_mode(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """Apply test augmentations (RGB to YUV conversion only), working with CHW format."""
     # OPTIMIZED: Direct CHW color conversion - no permutations needed!
     yuv_chw = rgb2yuv_chw_normalized(image)  # Direct CHW→CHW conversion
 
     return yuv_chw, label
+
+
+def train_augment_image_gpu(image: Tensor, label: Tensor, device: torch.device | None = None) -> tuple[Tensor, Tensor]:
+    """GPU-optimized training augmentations using pure tensor operations.
+
+    Eliminates CPU-GPU transfer overhead by keeping all operations on GPU.
+
+    Args:
+        image: RGB tensor in CHW format on any device
+        label: Label tensor on any device
+        device: Target device (if None, uses image.device)
+
+    Returns:
+        Augmented YUV tensor and adjusted label, both on target device
+    """
+    if device is None:
+        device = image.device
+
+    # Ensure tensors are on target device
+    image = image.to(device)
+    label = label.to(device)
+
+    # GPU-based random flip decision (no .item() call)
+    flip_prob = torch.rand(1, device=device)
+
+    # Vectorized horizontal flip - applies flip based on condition
+    if flip_prob < 0.5:
+        image = torch.flip(image, dims=[2])
+        # Vectorized label adjustment on GPU
+        label = torch.tensor([patch_width - label[0], label[1], label[2]], device=device, dtype=label.dtype)
+
+    # GPU-based random brightness adjustment
+    brightness_factor = 1.0 + (torch.rand(1, device=device) - 0.5) * 0.3  # ±0.15 range
+    image = torch.clamp(image * brightness_factor, 0, 1)
+
+    # GPU-accelerated color conversion
+    yuv_chw = rgb2yuv_chw_normalized(image)
+
+    return yuv_chw, label
+
+
+def augment_image_test_mode_gpu(
+    image: Tensor, label: Tensor, device: torch.device | None = None
+) -> tuple[Tensor, Tensor]:
+    """GPU-optimized test augmentations (RGB to YUV conversion only).
+
+    Args:
+        image: RGB tensor in CHW format on any device
+        label: Label tensor on any device
+        device: Target device (if None, uses image.device)
+
+    Returns:
+        YUV tensor and label, both on target device
+    """
+    if device is None:
+        device = image.device
+
+    # Ensure tensors are on target device
+    image = image.to(device)
+    label = label.to(device)
+
+    # GPU-accelerated color conversion
+    yuv_chw = rgb2yuv_chw_normalized(image)
+
+    return yuv_chw, label
+
+
+def train_augment_batch_gpu(
+    images: Tensor, labels: Tensor, device: torch.device | None = None
+) -> tuple[Tensor, Tensor]:
+    """GPU-optimized batch training augmentations for maximum throughput.
+
+    Processes entire batches on GPU for optimal memory bandwidth utilization.
+
+    Args:
+        images: RGB batch tensor (N, 3, H, W) on any device
+        labels: Labels batch tensor (N, 3) on any device
+        device: Target device (if None, uses images.device)
+
+    Returns:
+        Augmented YUV batch and adjusted labels, both on target device
+    """
+    if device is None:
+        device = images.device
+
+    # Ensure tensors are on target device
+    images = images.to(device)
+    labels = labels.to(device)
+
+    batch_size = images.shape[0]
+
+    # GPU-based vectorized random flip decisions for entire batch
+    flip_probs = torch.rand(batch_size, device=device)
+    flip_mask = flip_probs < 0.5
+
+    # Vectorized horizontal flip for selected samples
+    images[flip_mask] = torch.flip(images[flip_mask], dims=[3])  # Flip width dimension
+
+    # Vectorized label adjustment for flipped samples
+    flipped_labels = labels.clone()
+    flipped_labels[flip_mask, 0] = patch_width - labels[flip_mask, 0]
+    labels = flipped_labels
+
+    # GPU-based vectorized brightness adjustment for entire batch
+    brightness_factors = 1.0 + (torch.rand(batch_size, 1, 1, 1, device=device) - 0.5) * 0.3
+    images = torch.clamp(images * brightness_factors, 0, 1)
+
+    # GPU-accelerated batch color conversion
+    yuv_batch = rgb2yuv_chw_normalized(images)
+
+    return yuv_batch, labels
+
+
+def augment_batch_test_mode_gpu(
+    images: Tensor, labels: Tensor, device: torch.device | None = None
+) -> tuple[Tensor, Tensor]:
+    """GPU-optimized batch test augmentations (RGB to YUV conversion only).
+
+    Args:
+        images: RGB batch tensor (N, 3, H, W) on any device
+        labels: Labels batch tensor (N, 3) on any device
+        device: Target device (if None, uses images.device)
+
+    Returns:
+        YUV batch and labels, both on target device
+    """
+    if device is None:
+        device = images.device
+
+    # Ensure tensors are on target device
+    images = images.to(device)
+    labels = labels.to(device)
+
+    # GPU-accelerated batch color conversion
+    yuv_batch = rgb2yuv_chw_normalized(images)
+
+    return yuv_batch, labels
 
 
 def final_adjustments(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
@@ -271,7 +408,7 @@ class BallDataset(Dataset):
             image, label_tensor = train_augment_image(image, label_tensor)
         else:
             image, label_tensor = crop_image_by_image(image, label_tensor)
-            image, label_tensor = test_augment_image(image, label_tensor)
+            image, label_tensor = augment_image_test_mode(image, label_tensor)
 
         image, label_tensor = final_adjustments(image, label_tensor)
 
@@ -279,11 +416,71 @@ class BallDataset(Dataset):
         return image, label_tensor
 
 
+class BallDatasetGPU(Dataset):
+    """GPU-optimized PyTorch dataset for ball detection.
+
+    Performs augmentations on GPU to eliminate CPU-GPU transfer overhead.
+    """
+
+    def __init__(
+        self,
+        images: list[str],
+        labels: list[tuple[int, int, int, int]],
+        trainset: bool = True,
+        device: torch.device | str | None = None,
+        pin_memory: bool = True,
+    ) -> None:
+        self.images = images
+        self.labels = labels
+        self.trainset = trainset
+        self.pin_memory = pin_memory
+
+        # Device management
+        if device is None:
+            self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        elif isinstance(device, str):
+            self.device = torch.device(device)
+        else:
+            self.device = device
+
+    def __len__(self) -> int:
+        return len(self.images)
+
+    def __getitem__(self, idx: int) -> tuple[Tensor, Tensor]:
+        image_path = self.images[idx]
+        label_tuple = self.labels[idx]
+
+        # Load on CPU (image loading is I/O bound)
+        image, label_tensor = load_image(image_path, label_tuple)
+
+        # Basic preprocessing on CPU (spatial operations)
+        if self.trainset:
+            image, label_tensor = crop_image_random_with_ball(image, label_tensor)
+        else:
+            image, label_tensor = crop_image_by_image(image, label_tensor)
+
+        # Pin memory for faster CPU-GPU transfer if requested
+        if self.pin_memory:
+            image = image.pin_memory()
+            label_tensor = label_tensor.pin_memory()
+
+        # GPU-based augmentations - move to GPU and process
+        if self.trainset:
+            image, label_tensor = train_augment_image_gpu(image, label_tensor, self.device)
+        else:
+            image, label_tensor = augment_image_test_mode_gpu(image, label_tensor, self.device)
+
+        # Final adjustments can stay on GPU if scale functions support it
+        image, label_tensor = final_adjustments(image, label_tensor)
+
+        return image, label_tensor
+
+
 def create_dataset(
     images: list[str], labels: list[tuple[int, int, int, int]], batch_size: int, trainset: bool = True
 ) -> DataLoader[tuple[Tensor, Tensor]]:
     """Create PyTorch DataLoader for the dataset."""
-    dataset: Dataset[tuple[Tensor, Tensor]] = BallDataset(images, labels, trainset)
+    dataset: Dataset[tuple[Tensor, Tensor]] = BallDatasetGPU(images, labels, trainset)
     return DataLoader[tuple[Tensor, Tensor]](
         dataset,
         batch_size=batch_size,
@@ -292,6 +489,109 @@ def create_dataset(
         pin_memory=True,
         persistent_workers=True if len(images) > 100 else False,
     )
+
+
+def create_dataset_gpu(
+    images: list[str],
+    labels: list[tuple[int, int, int, int]],
+    batch_size: int,
+    trainset: bool = True,
+    device: torch.device | str | None = None,
+    use_batch_augmentation: bool = True,
+) -> DataLoader[tuple[Tensor, Tensor]]:
+    """Create GPU-optimized PyTorch DataLoader for maximum performance.
+
+    Args:
+        images: List of image paths
+        labels: List of label tuples
+        batch_size: Batch size for training
+        trainset: Whether this is a training set (affects augmentation)
+        device: Target device for GPU processing
+        use_batch_augmentation: Whether to use batch-level GPU augmentation
+
+    Returns:
+        GPU-optimized DataLoader with reduced CPU-GPU transfer overhead
+    """
+    if use_batch_augmentation:
+        # Create dataset that stops before augmentation for batch processing
+        class BallDatasetPreAugment(Dataset[tuple[Tensor, Tensor]]):
+            """Dataset that stops before augmentation to allow batch-level GPU processing."""
+
+            def __init__(
+                self, images: list[str], labels: list[tuple[int, int, int, int]], trainset: bool = True
+            ) -> None:
+                self.images = images
+                self.labels = labels
+                self.trainset = trainset
+
+            def __len__(self) -> int:
+                return len(self.images)
+
+            def __getitem__(self, idx: int) -> tuple[Tensor, Tensor]:
+                image_path = self.images[idx]
+                label_tuple = self.labels[idx]
+
+                image, label_tensor = load_image(image_path, label_tuple)
+
+                # Do spatial preprocessing on CPU
+                if self.trainset:
+                    image, label_tensor = crop_image_random_with_ball(image, label_tensor)
+                else:
+                    image, label_tensor = crop_image_by_image(image, label_tensor)
+
+                # Apply final adjustments on CPU
+                image, label_tensor = final_adjustments(image, label_tensor)
+
+                # Return RGB image (not yet converted to YUV) for batch GPU processing
+                return image, label_tensor
+
+        dataset = BallDatasetPreAugment(images, labels, trainset)
+
+        # Create custom collate function for GPU batch processing
+        def gpu_batch_collate_fn(batch: list[tuple[Tensor, Tensor]]) -> tuple[Tensor, Tensor]:
+            """Custom collate function that performs batch augmentation on GPU."""
+            images_list, labels_list = zip(*batch)
+
+            # Stack into batches on CPU first
+            images_batch = torch.stack(images_list, dim=0)  # (N, 3, H, W)
+            labels_batch = torch.stack(labels_list, dim=0)  # (N, 3)
+
+            # Determine target device
+            target_device = device
+            if target_device is None:
+                target_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            elif isinstance(target_device, str):
+                target_device = torch.device(target_device)
+
+            # Move to GPU and perform batch augmentation
+            # Input: RGB images, Output: YUV images
+            if trainset:
+                images_batch, labels_batch = train_augment_batch_gpu(images_batch, labels_batch, target_device)
+            else:
+                images_batch, labels_batch = augment_batch_test_mode_gpu(images_batch, labels_batch, target_device)
+
+            return images_batch, labels_batch
+
+        return DataLoader[tuple[Tensor, Tensor]](
+            dataset,
+            batch_size=batch_size,
+            shuffle=trainset,
+            num_workers=multiprocessing.cpu_count() // 2,
+            pin_memory=True,
+            persistent_workers=True if len(images) > 100 else False,
+            collate_fn=gpu_batch_collate_fn,
+        )
+    else:
+        # Use individual GPU augmentation
+        gpu_dataset: Dataset[tuple[Tensor, Tensor]] = BallDatasetGPU(images, labels, trainset, device, pin_memory=True)
+        return DataLoader[tuple[Tensor, Tensor]](
+            gpu_dataset,
+            batch_size=batch_size,
+            shuffle=trainset,
+            num_workers=multiprocessing.cpu_count() // 4,  # Fewer workers since GPU does more work
+            pin_memory=False,  # Dataset handles pinning
+            persistent_workers=True if len(images) > 100 else False,
+        )
 
 
 class BallPatchDataset(Dataset[tuple[Tensor, Tensor]]):
@@ -309,16 +609,16 @@ class BallPatchDataset(Dataset[tuple[Tensor, Tensor]]):
         label_tuple = self.labels[idx]
 
         image, label_tensor = load_image(image_path, label_tuple)
-        
+
         # OPTIMIZED: Direct CHW patchification - no permutations!
         patches, patch_labels = patchify_image_chw(image, label_tensor)  # CHW → NCHW
-        
+
         # OPTIMIZED: Direct CHW color conversion - no permutations!
         augmented_patches = rgb2yuv_chw_normalized(patches)  # NCHW → NCHW conversion
-        
+
         # Apply final adjustments using batch processing
         augmented_patches_normalized, final_labels = final_adjustments_patches(augmented_patches, patch_labels)
-        
+
         # Already in NCHW format - no permutation needed!
         return augmented_patches_normalized, final_labels
 
