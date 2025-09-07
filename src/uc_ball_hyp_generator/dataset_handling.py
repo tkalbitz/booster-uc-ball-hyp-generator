@@ -2,7 +2,6 @@ import multiprocessing
 from pathlib import Path
 
 import blake3
-
 import numpy as np
 import numpy.typing as npt
 import torch
@@ -395,7 +394,8 @@ def create_dataset(
         shuffle=trainset,
         num_workers=multiprocessing.cpu_count(),
         pin_memory=True,
-        persistent_workers=True if len(images) > 100 else False,
+        prefetch_factor=4,
+        persistent_workers=True,
     )
 
 
