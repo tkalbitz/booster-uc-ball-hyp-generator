@@ -368,7 +368,7 @@ def test_ball_dataset_getitem_test() -> None:
     try:
         with (
             patch("uc_ball_hyp_generator.dataset_handling.crop_image_by_image") as mock_crop,
-            patch("uc_ball_hyp_generator.dataset_handling.augment_image_test_mode") as mock_augment,
+            patch("uc_ball_hyp_generator.dataset_handling.test_augment_image") as mock_augment,
             patch("uc_ball_hyp_generator.dataset_handling.final_adjustments") as mock_final,
         ):
             # Set up mocks
