@@ -1,7 +1,7 @@
 """Ball detection adapter for naoteamhtwk_machinelearning_visualizer.
 
 This adapter loads a trained PyTorch ball detection model and runs inference on images,
-splitting them into patches as during training and returning VisualizationResult objects 
+splitting them into patches as during training and returning VisualizationResult objects
 with ball detection annotations using EllipseShape.
 """
 
@@ -262,5 +262,5 @@ def get_adapter_info() -> dict[str, str]:
         "classes": "ball",
         "requirements": "torch>=2.8.0, PIL, numpy",
         "environment": "Set BALL_MODEL_PATH to point to the .pth model file",
-        "patch_info": f"Processes images as {img_scaled_width//patch_width}x{img_scaled_height//patch_height} grid of {patch_width}x{patch_height} patches",
+        "patch_info": f"Processes images as {img_scaled_width // patch_width}x{img_scaled_height // patch_height} grid of {patch_width}x{patch_height} patches",
     }

@@ -115,7 +115,10 @@ def test_distance_loss_tensor_conversion() -> None:
     y_pred = torch.tensor([[1.0, 1.0, 10.0]])
 
     # Mock unscale functions to return scalar values instead of tensors
-    with patch("uc_ball_hyp_generator.model_setup.unscale_x") as mock_unscale_x, patch("uc_ball_hyp_generator.model_setup.unscale_y") as mock_unscale_y:
+    with (
+        patch("uc_ball_hyp_generator.model_setup.unscale_x") as mock_unscale_x,
+        patch("uc_ball_hyp_generator.model_setup.unscale_y") as mock_unscale_y,
+    ):
         # Return tensors with appropriate shapes to test tensor conversion logic
         mock_unscale_x.side_effect = lambda x: torch.tensor([2.0]) if x[0].item() == 0.0 else torch.tensor([3.0])
         mock_unscale_y.side_effect = lambda x: torch.tensor([4.0]) if x[0].item() == 0.0 else torch.tensor([5.0])
@@ -313,7 +316,10 @@ def test_compile_existing_model_success() -> None:
     """Test compile_existing_model with successful compilation."""
     model = MockModel()
 
-    with patch("uc_ball_hyp_generator.model_setup.torch.compile") as mock_compile, patch("uc_ball_hyp_generator.model_setup._logger") as mock_logger:
+    with (
+        patch("uc_ball_hyp_generator.model_setup.torch.compile") as mock_compile,
+        patch("uc_ball_hyp_generator.model_setup._logger") as mock_logger,
+    ):
         mock_compiled = Mock()
         mock_compile.return_value = mock_compiled
 
@@ -342,7 +348,10 @@ def test_compile_existing_model_not_available() -> None:
     """Test compile_existing_model when torch.compile is not available."""
     model = MockModel()
 
-    with patch("uc_ball_hyp_generator.model_setup.torch", spec_set=[]), patch("uc_ball_hyp_generator.model_setup._logger") as mock_logger:
+    with (
+        patch("uc_ball_hyp_generator.model_setup.torch", spec_set=[]),
+        patch("uc_ball_hyp_generator.model_setup._logger") as mock_logger,
+    ):
         result = compile_existing_model(model)
 
         assert result is model  # Should return original model
@@ -353,7 +362,10 @@ def test_compile_existing_model_default_mode() -> None:
     """Test compile_existing_model with default compilation mode."""
     model = MockModel()
 
-    with patch("uc_ball_hyp_generator.model_setup.torch.compile") as mock_compile, patch("uc_ball_hyp_generator.model_setup._logger"):
+    with (
+        patch("uc_ball_hyp_generator.model_setup.torch.compile") as mock_compile,
+        patch("uc_ball_hyp_generator.model_setup._logger"),
+    ):
         mock_compiled = Mock()
         mock_compile.return_value = mock_compiled
 

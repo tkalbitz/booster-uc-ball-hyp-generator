@@ -143,7 +143,10 @@ def test_calculate_random_crop_bounds() -> None:
     cy = torch.tensor(60.0)
     d = torch.tensor(20.0)
 
-    with patch("uc_ball_hyp_generator.dataset_handling.patch_width", 40), patch("uc_ball_hyp_generator.dataset_handling.patch_height", 30):
+    with (
+        patch("uc_ball_hyp_generator.dataset_handling.patch_width", 40),
+        patch("uc_ball_hyp_generator.dataset_handling.patch_height", 30),
+    ):
         x, y = _calculate_random_crop_bounds(cx, cy, d)
 
         assert isinstance(x, int)
