@@ -9,7 +9,7 @@ from uc_ball_hyp_generator import config
 from uc_ball_hyp_generator.models import NetworkV2
 
 
-def visualize_model(input_height: int = 224, input_width: int = 224, batch_size: int = 1) -> None:
+def visualize_model(input_height: int = 480, input_width: int = 640, batch_size: int = 1) -> None:
     """Visualize the NetworkV2 model architecture with layer details and dimensions."""
     model = NetworkV2(input_height=input_height, input_width=input_width, num_classes=2)
 
@@ -54,10 +54,6 @@ def visualize_forward_pass(input_height: int = 224, input_width: int = 224) -> N
     for i, block in enumerate(model.feature_blocks):
         x = block(x)
         print(f"After feature block {i + 1}: {x.shape}")
-
-    # Global pooling
-    x = model.global_pool(x)
-    print(f"After global pooling: {x.shape}")
 
     # Classifier
     x = model.classifier(x)

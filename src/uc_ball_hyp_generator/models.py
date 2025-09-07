@@ -107,15 +107,12 @@ class NetworkV2(nn.Module):
                 nn.Sequential(BigLittleReduction(8, 10, "relu"), nn.Dropout(0.2)),
                 nn.Sequential(BigLittleReduction(15, 12, "relu"), SEBlock(18), nn.Dropout(0.1)),
                 nn.Sequential(BigLittleReduction(18, 12, "relu"), SEBlock(18), nn.Dropout(0.1)),
-                # nn.Sequential(BigLittleReduction(18, 14, "relu"), SEBlock(21), nn.Dropout(0.1)),
+                nn.Sequential(BigLittleReduction(18, 14, "relu"), SEBlock(21), nn.Dropout(0.1)),
             ]
         )
 
-        # Modern adaptive pooling - no manual size calculation needed!
-        self.global_pool = nn.AdaptiveAvgPool2d(1)  # Always outputs (B, C, 1, 1)
-
         # Modern classification head - only need to know final channel count
-        final_channels = 18  # Output channels from last feature block
+        final_channels = 126  # Output channels from last feature block
         self.classifier = nn.Sequential(
             nn.Flatten(),  # (B, C, 1, 1) -> (B, C)
             nn.Linear(final_channels, 32),  # Slightly larger intermediate layer
@@ -132,7 +129,6 @@ class NetworkV2(nn.Module):
             x = block(x)
 
         # Adaptive pooling works for ANY spatial size
-        x = self.global_pool(x)  # (B, 21, H, W) -> (B, 21, 1, 1)
         x = self.classifier(x)  # (B, 21, 1, 1) -> (B, num_classes)
 
         return x
