@@ -1,7 +1,8 @@
 """Ball detection adapter for naoteamhtwk_machinelearning_visualizer.
 
 This adapter loads a trained PyTorch ball detection model and runs inference on images,
-returning VisualizationResult objects with ball detection annotations using EllipseShape.
+splitting them into patches as during training and returning VisualizationResult objects 
+with ball detection annotations using EllipseShape.
 """
 
 import logging
@@ -14,7 +15,15 @@ from naoteamhtwk_machinelearning_visualizer.core.shapes import Annotation, Ellip
 from PIL import Image
 
 import uc_ball_hyp_generator.models as models
-from uc_ball_hyp_generator.config import patch_height, patch_width
+from uc_ball_hyp_generator.config import (
+    img_scaled_height,
+    img_scaled_width,
+    patch_height,
+    patch_width,
+    scale_factor,
+    scale_factor_f,
+)
+from uc_ball_hyp_generator.dataset_handling import rgb2yuv_optimized
 from uc_ball_hyp_generator.scale import unscale_x, unscale_y
 
 _logger = logging.getLogger(__name__)
@@ -53,10 +62,10 @@ def _load_model() -> tuple[torch.nn.Module, torch.device]:
             _device = torch.device("cuda")
 
         _model = models.create_network_v2(patch_height, patch_width)
-        
+
         # Load state dict and handle torch.compile prefixes
         state_dict = torch.load(current_model_path, map_location=_device)
-        
+
         # Check if this is a compiled model (has _orig_mod. prefixes)
         if any(key.startswith("_orig_mod.") for key in state_dict.keys()):
             _logger.info("Detected compiled model, removing _orig_mod. prefixes")
@@ -64,12 +73,12 @@ def _load_model() -> tuple[torch.nn.Module, torch.device]:
             cleaned_state_dict = {}
             for key, value in state_dict.items():
                 if key.startswith("_orig_mod."):
-                    cleaned_key = key[len("_orig_mod."):]
+                    cleaned_key = key[len("_orig_mod.") :]
                     cleaned_state_dict[cleaned_key] = value
                 else:
                     cleaned_state_dict[key] = value
             state_dict = cleaned_state_dict
-        
+
         _model.load_state_dict(state_dict)
         _model.to(_device)
         _model.eval()
@@ -81,89 +90,107 @@ def _load_model() -> tuple[torch.nn.Module, torch.device]:
 
 
 def _preprocess_image(image_path: str) -> tuple[torch.Tensor, tuple[int, int]]:
-    """Load and preprocess image for model inference."""
-    image = Image.open(image_path).convert("RGB")
-    original_size = image.size  # (width, height)
+    """Load and preprocess image for model inference, splitting into patches."""
+    # Load and resize image as done in training
+    pil_image = Image.open(image_path).convert("RGB")
+    original_size = pil_image.size  # (width, height)
 
-    # Resize to model input size
-    image_resized = image.resize((patch_width, patch_height), Image.Resampling.LANCZOS)
+    # Resize to scaled dimensions (160x120 with default config)
+    pil_image_scaled = pil_image.resize((img_scaled_width, img_scaled_height), Image.Resampling.LANCZOS)
 
-    # Convert to numpy array and normalize
-    image_array = np.array(image_resized, dtype=np.float32) / 255.0
+    # Convert to numpy array
+    image_array = np.array(pil_image_scaled, dtype=np.float32)
 
-    # Convert RGB to YUV (as expected by the model)
-    image_yuv = _rgb_to_yuv(image_array)
+    # Convert to tensor (H, W, C format for color conversion)
+    image_tensor = torch.from_numpy(image_array)
 
-    # Convert to tensor and add batch dimension
-    image_tensor = torch.from_numpy(image_yuv).permute(2, 0, 1).unsqueeze(0)  # (1, 3, H, W)
+    # Convert RGB to YUV as in training
+    yuv_tensor = rgb2yuv_optimized(image_tensor)  # Still (H, W, C)
 
-    return image_tensor, original_size
+    # Split image into patches
+    patches_y = img_scaled_height // patch_height
+    patches_x = img_scaled_width // patch_width
+
+    patches = []
+    patch_positions = []
+
+    for py in range(patches_y):
+        for px in range(patches_x):
+            start_y = py * patch_height
+            end_y = start_y + patch_height
+            start_x = px * patch_width
+            end_x = start_x + patch_width
+
+            # Extract patch
+            patch = yuv_tensor[start_y:end_y, start_x:end_x, :]  # (H, W, C)
+
+            # Convert to CHW format and normalize as in training
+            patch_chw = patch.permute(2, 0, 1) / 255.0  # (C, H, W)
+            patches.append(patch_chw)
+
+            # Store patch position for coordinate conversion
+            patch_positions.append((start_x, start_y))
+
+    # Stack all patches into a batch
+    patch_batch = torch.stack(patches)  # (num_patches, C, H, W)
+
+    return patch_batch, original_size, patch_positions
 
 
-def _rgb_to_yuv(rgb_image: np.ndarray) -> np.ndarray:
-    """Convert RGB image to YUV color space."""
-    # YUV conversion matrix
-    rgb_to_yuv_matrix = np.array([
-        [0.299, 0.587, 0.114],
-        [-0.14713, -0.28886, 0.436],
-        [0.615, -0.51499, -0.10001]
-    ])
-
-    # Reshape image for matrix multiplication
-    h, w, c = rgb_image.shape
-    rgb_flat = rgb_image.reshape(-1, 3)
-
-    # Apply conversion
-    yuv_flat = rgb_flat @ rgb_to_yuv_matrix.T
-
-    # Reshape back and normalize YUV
-    yuv_image = yuv_flat.reshape(h, w, 3)
-    yuv_image[:, :, 0] = yuv_image[:, :, 0]  # Y channel (0-1)
-    yuv_image[:, :, 1] = yuv_image[:, :, 1] + 0.5  # U channel (-0.5 to 0.5) -> (0-1)
-    yuv_image[:, :, 2] = yuv_image[:, :, 2] + 0.5  # V channel (-0.5 to 0.5) -> (0-1)
-
-    return yuv_image.astype(np.float32)
-
-
-def _postprocess_prediction(prediction: torch.Tensor, original_size: tuple[int, int]) -> list[Annotation]:
-    """Convert model prediction to visualization annotations."""
+def _postprocess_predictions(
+    predictions: torch.Tensor, original_size: tuple[int, int], patch_positions: list[tuple[int, int]]
+) -> list[Annotation]:
+    """Convert model predictions to visualization annotations."""
     annotations = []
 
-    # Extract prediction values
-    pred_x = prediction[0].item()
-    pred_y = prediction[1].item()
+    # Filter predictions to only include likely ball detections
+    # We'll use a threshold approach - only show patches where the model is confident
+    for i, (pred_x, pred_y) in enumerate(predictions):
+        patch_start_x, patch_start_y = patch_positions[i]
 
-    # Unscale the coordinates
-    ball_x_patch = float(unscale_x(pred_x))
-    ball_y_patch = float(unscale_y(pred_y))
+        # Unscale the coordinates (convert from model output space to patch coordinates)
+        ball_x_patch = float(unscale_x(pred_x.item()))
+        ball_y_patch = float(unscale_y(pred_y.item()))
 
-    # Convert from patch coordinates to relative coordinates (0-1)
-    # The unscale functions return patch coordinates relative to patch center
-    rel_x = (ball_x_patch + patch_width / 2) / patch_width
-    rel_y = (ball_y_patch + patch_height / 2) / patch_height
+        # Convert from patch-local coordinates to scaled image coordinates
+        ball_x_scaled = ball_x_patch + patch_width / 2 + patch_start_x
+        ball_y_scaled = ball_y_patch + patch_height / 2 + patch_start_y
 
-    # Clamp to valid range
-    rel_x = max(0.0, min(1.0, rel_x))
-    rel_y = max(0.0, min(1.0, rel_y))
+        # Convert from scaled image coordinates to original image coordinates
+        ball_x_orig = ball_x_scaled * scale_factor_f
+        ball_y_orig = ball_y_scaled * scale_factor_f
 
-    # Define ellipse size (relative to image size)
-    ellipse_width = 0.02  # 2% of image width
-    ellipse_height = 0.02  # 2% of image height
+        # Convert to relative coordinates (0-1) for the visualizer
+        rel_x = ball_x_orig / original_size[0]  # width
+        rel_y = ball_y_orig / original_size[1]  # height
 
-    # Create ellipse shape centered at predicted position
-    center = Point(x=rel_x, y=rel_y)
-    shape = EllipseShape(center=center, width=ellipse_width, height=ellipse_height)
+        # Clamp to valid range
+        rel_x = max(0.0, min(1.0, rel_x))
+        rel_y = max(0.0, min(1.0, rel_y))
 
-    # Create annotation
-    annotation = Annotation(
-        shape=shape,
-        text="ball",
-        accuracy=None,  # This model doesn't provide confidence scores
-        color="#FF4500",  # Orange color for ball
-        outline_color="#FFFFFF"  # White outline
-    )
+        # Only add annotation if the predicted position is within the patch bounds
+        # This helps filter out patches without balls
+        if 0 <= ball_x_patch <= patch_width and 0 <= ball_y_patch <= patch_height:
+            # Define ellipse size (relative to image size)
+            ellipse_width = 0.02  # 2% of image width
+            ellipse_height = 0.02  # 2% of image height
 
-    annotations.append(annotation)
+            # Create ellipse shape centered at predicted position
+            center = Point(x=rel_x, y=rel_y)
+            shape = EllipseShape(center=center, width=ellipse_width, height=ellipse_height)
+
+            # Create annotation with confidence-based coloring
+            # Use different colors for patches to help debugging if needed
+            annotation = Annotation(
+                shape=shape,
+                text=f"ball_p{i}",  # Include patch index for debugging
+                accuracy=None,  # This model doesn't provide confidence scores
+                color="#FF4500",  # Orange color for ball
+                outline_color="#FFFFFF",  # White outline
+            )
+
+            annotations.append(annotation)
+
     return annotations
 
 
@@ -176,7 +203,7 @@ def adapter(image_paths: list[str]) -> list[VisualizationResult]:
     Returns:
         List of VisualizationResult objects with ball detection annotations
     """
-    _logger.info("Processing %d images with ball detection model", len(image_paths))
+    _logger.info("Processing %d images with patch-based ball detection model", len(image_paths))
 
     try:
         model, device = _load_model()
@@ -194,32 +221,26 @@ def adapter(image_paths: list[str]) -> list[VisualizationResult]:
         try:
             _logger.debug("Processing image: %s", image_path)
 
-            # Preprocess image
-            input_tensor, original_size = _preprocess_image(image_path)
-            input_tensor = input_tensor.to(device)
+            # Preprocess image into patches
+            patch_batch, original_size, patch_positions = _preprocess_image(image_path)
+            patch_batch = patch_batch.to(device)
 
-            # Run inference
+            # Run inference on all patches
             with torch.no_grad():
-                prediction = model(input_tensor)
+                predictions = model(patch_batch)
 
-            # Postprocess prediction
-            annotations = _postprocess_prediction(prediction[0], original_size)
+            # Postprocess predictions to annotations
+            annotations = _postprocess_predictions(predictions, original_size, patch_positions)
 
             result = VisualizationResult(
-                image_path=Path(image_path).resolve(),
-                annotations=annotations,
-                result_image=None
+                image_path=Path(image_path).resolve(), annotations=annotations, result_image=None
             )
             results.append(result)
 
         except Exception as e:
             _logger.error("Failed to process %s: %s", image_path, e)
             # Create empty result for failed image
-            result = VisualizationResult(
-                image_path=Path(image_path).resolve(),
-                annotations=[],
-                result_image=None
-            )
+            result = VisualizationResult(image_path=Path(image_path).resolve(), annotations=[], result_image=None)
             results.append(result)
 
     _logger.info("Successfully processed %d images", len(results))
@@ -233,12 +254,13 @@ def get_adapter_info() -> dict[str, str]:
         Dictionary containing adapter metadata
     """
     return {
-        "name": "UC Ball Detection",
+        "name": "UC Ball Detection (Patch-based)",
         "version": "1.0.0",
-        "description": "Ball detection using trained PyTorch model for UC ball hypothesis generation",
+        "description": "Ball detection using trained PyTorch model with patch-based processing for UC ball hypothesis generation",
         "supported_formats": "JPEG, PNG, and other PIL-supported formats",
         "model_type": "NetworkV2 (Custom CNN)",
         "classes": "ball",
         "requirements": "torch>=2.8.0, PIL, numpy",
-        "environment": "Set BALL_MODEL_PATH to point to the .pth model file"
+        "environment": "Set BALL_MODEL_PATH to point to the .pth model file",
+        "patch_info": f"Processes images as {img_scaled_width//patch_width}x{img_scaled_height//patch_height} grid of {patch_width}x{patch_height} patches",
     }
