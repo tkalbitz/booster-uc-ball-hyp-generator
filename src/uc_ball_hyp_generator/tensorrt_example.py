@@ -147,4 +147,3 @@ def print_usage_instructions() -> None:
 if __name__ == "__main__":
     print_usage_instructions()
     example_export_workflow()
-    example_export_workflow()

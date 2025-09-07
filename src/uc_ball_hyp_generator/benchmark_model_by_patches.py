@@ -58,4 +58,3 @@ for s in range(steps):
 
 
 print(f"Found in total {ball_sum} / {steps * batch_size}")
-print(f"Found in total {ball_sum} / {steps * batch_size}")

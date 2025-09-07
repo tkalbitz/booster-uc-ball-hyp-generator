@@ -87,4 +87,3 @@ torch.onnx.export(
 )
 
 print(f"Saved ONNX model to {onnx_path}")
-print(f"Saved ONNX model to {onnx_path}")
