@@ -146,12 +146,12 @@ def _postprocess_predictions(predictions: torch.Tensor, preprocessed: Preprocess
 
     _logger.info("Original size %d/%d.", preprocessed.original_size[0], preprocessed.original_size[1])
 
+    orig_size_x, orig_size_y = preprocessed.original_size[0], preprocessed.original_size[1]
+
     # Filter predictions to only include likely ball detections
     # We'll use a threshold approach - only show patches where the model is confident
     for i, (pred_x, pred_y) in enumerate(predictions):
         patch_start_x, patch_start_y = preprocessed.patch_positions[i]
-        _logger.info("Path start: x=%d y=%d", patch_start_x, patch_start_y)
-
         # Unscale the coordinates (convert from model output space to patch coordinates)
         ball_x_patch = float(unscale_x(pred_x.item()))
         ball_y_patch = float(unscale_y(pred_y.item()))
@@ -174,7 +174,7 @@ def _postprocess_predictions(predictions: torch.Tensor, preprocessed: Preprocess
 
         # Only add annotation if the predicted position is within the patch bounds
         # This helps filter out patches without balls
-        if 0 <= ball_x_patch <= patch_width and 0 <= ball_y_patch <= patch_height:
+        if 0 <= ball_x_orig <= orig_size_x and 0 <= ball_y_orig <= orig_size_y:
             # Define ellipse size (relative to image size)
             ellipse_width = 0.02  # 2% of image width
             ellipse_height = 0.02  # 2% of image height
