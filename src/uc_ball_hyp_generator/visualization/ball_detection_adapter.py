@@ -53,7 +53,24 @@ def _load_model() -> tuple[torch.nn.Module, torch.device]:
             _device = torch.device("cuda")
 
         _model = models.create_network_v2(patch_height, patch_width)
-        _model.load_state_dict(torch.load(current_model_path, map_location=_device))
+        
+        # Load state dict and handle torch.compile prefixes
+        state_dict = torch.load(current_model_path, map_location=_device)
+        
+        # Check if this is a compiled model (has _orig_mod. prefixes)
+        if any(key.startswith("_orig_mod.") for key in state_dict.keys()):
+            _logger.info("Detected compiled model, removing _orig_mod. prefixes")
+            # Remove _orig_mod. prefixes from compiled model
+            cleaned_state_dict = {}
+            for key, value in state_dict.items():
+                if key.startswith("_orig_mod."):
+                    cleaned_key = key[len("_orig_mod."):]
+                    cleaned_state_dict[cleaned_key] = value
+                else:
+                    cleaned_state_dict[key] = value
+            state_dict = cleaned_state_dict
+        
+        _model.load_state_dict(state_dict)
         _model.to(_device)
         _model.eval()
         _model_path = current_model_path
