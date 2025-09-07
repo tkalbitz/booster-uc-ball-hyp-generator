@@ -108,9 +108,22 @@ def log_epoch_metrics(
     csv_file: TextIO,
 ) -> None:
     """Log epoch metrics to console, TensorBoard, and CSV."""
-    _logger.info("Epoch %d/%d:", epoch + 1, epochs)
-    _logger.info("Train - Loss: %.6f, Acc: %.6f, Found Balls: %.6f", train_loss, train_acc, train_found_balls)
-    _logger.info("Val - Loss: %.6f, Acc: %.6f, Found Balls: %.6f", val_loss, val_acc, val_found_balls)
+    _logger.info(
+        "Epoch %d/%d: Train - Loss: %.6f, Acc: %.6f, Found Balls: %.6f",
+        epoch + 1,
+        epochs,
+        train_loss,
+        train_acc,
+        train_found_balls,
+    )
+    _logger.info(
+        "Epoch %d/%d: Val   - Loss: %.6f, Acc: %.6f, Found Balls: %.6f",
+        epoch + 1,
+        epochs,
+        val_loss,
+        val_acc,
+        val_found_balls,
+    )
 
     writer.add_scalar("Loss/Train", train_loss, epoch)
     writer.add_scalar("Loss/Validation", val_loss, epoch)
@@ -139,20 +152,24 @@ def save_model_checkpoints(
 
     if val_loss < best_val_loss:
         best_val_loss = val_loss
+        loss_filename = f"weights.loss.{epoch + 1:03d}-{val_loss:.6f}-{val_found_balls:.6f}.pth"
         torch.save(
             model.state_dict(),
-            os.path.join(model_dir, f"weights.loss.{epoch + 1:03d}-{val_loss:.6f}-{val_found_balls:.6f}.pth"),
+            os.path.join(model_dir, loss_filename),
         )
         patience_counter = 0
+        _logger.info("Save new best model (loss): %s", loss_filename)
     else:
         patience_counter += 1
 
     if val_found_balls > best_val_found_balls:
         best_val_found_balls = val_found_balls
+        most_balls_filename = f"weights.balls.{epoch + 1:03d}-{val_found_balls:.6f}-{val_loss:.6f}.pth"
         torch.save(
             model.state_dict(),
-            os.path.join(model_dir, f"weights.balls.{epoch + 1:03d}-{val_found_balls:.6f}-{val_loss:.6f}.pth"),
+            os.path.join(model_dir, most_balls_filename),
         )
+        _logger.info("Save new best model (ball): %s", most_balls_filename)
 
     return best_val_loss, best_val_found_balls, patience_counter
 
