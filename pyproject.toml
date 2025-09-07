@@ -15,6 +15,7 @@ dependencies = [
     "tensorboard>=2.0.0",
     "tensorrt>=8.0.0",
     "torchinfo>=1.8.0",
+    "naoteamhtwk-machinelearning-visualizer",
 ]
 
 [dependency-groups]
@@ -37,6 +38,7 @@ explicit = true
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu" }]
 torchvision = [{ index = "pytorch-cpu" }]
+naoteamhtwk-machinelearning-visualizer = { git = "ssh://git@github.com/tkalbitz/naoteam-machine-learning-visualizer.git" }
 
 [tool.mypy]
 exclude = ["^model/$", '^logs/$']
