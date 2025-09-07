@@ -14,6 +14,10 @@ from uc_ball_hyp_generator.color_conversion import rgb2yuv_chw_normalized
 from uc_ball_hyp_generator.config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
 from uc_ball_hyp_generator.scale import scale_x, scale_y
 
+# Cache for pre-calculated crop regions to optimize repeated random cropping
+type CropRegion = tuple[int, int, int, int]  # x_min, x_max, y_min, y_max
+_crop_region_cache: dict[tuple[float, float, float], CropRegion] = {}
+
 
 def downsample_by_averaging(img: npt.NDArray[np.float32], scale: tuple[int, int]) -> npt.NDArray[np.float32]:
     """Downsample image by averaging blocks."""
@@ -74,23 +78,84 @@ def crop_image_by_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
 
 
 def _calculate_random_crop_bounds(cx: Tensor, cy: Tensor, d: Tensor) -> tuple[int, int]:
-    """Calculate random crop position bounds to keep ball visible."""
+    """Calculate random crop position bounds to keep ball visible with optimized computation."""
+    # Pre-calculate offset and convert tensors to float once
+    offset = (d * 0.05).item()
+    cx_val = cx.item()
+    cy_val = cy.item()
+    
+    # Calculate bounds with single operations and proper ordering
+    x_min = max(int(cx_val + offset - patch_width), 0)
+    x_max = max(int(cx_val - offset), 0)
+    y_min = max(int(cy_val + offset - patch_height), 0) 
+    y_max = max(int(cy_val - offset), 0)
+    
+    # Ensure proper ordering (min <= max)
+    if x_min > x_max:
+        x_min, x_max = x_max, x_min
+    if y_min > y_max:
+        y_min, y_max = y_max, y_min
+        
+    # Generate random coordinates with single torch operations when needed
+    if x_min == x_max:
+        x = x_min
+    else:
+        x = int(torch.randint(x_min, x_max + 1, (1,), dtype=torch.int32).item())
+        
+    if y_min == y_max:
+        y = y_min
+    else:
+        y = int(torch.randint(y_min, y_max + 1, (1,), dtype=torch.int32).item())
+
+    return x, y
+
+
+def clear_crop_region_cache() -> None:
+    """Clear the crop region cache to free memory."""
+    global _crop_region_cache
+    _crop_region_cache.clear()
+
+
+def _get_or_calculate_crop_region(cx: float, cy: float, d: float) -> CropRegion:
+    """Get pre-calculated crop region or calculate and cache it."""
+    cache_key = (cx, cy, d)
+    
+    if cache_key in _crop_region_cache:
+        return _crop_region_cache[cache_key]
+    
+    # Pre-calculate valid crop region bounds
     offset = d * 0.05
+    
+    x_min = max(int(cx + offset - patch_width), 0)
+    x_max = max(int(cx - offset), 0)
+    y_min = max(int(cy + offset - patch_height), 0)
+    y_max = max(int(cy - offset), 0)
+    
+    # Ensure proper ordering
+    if x_min > x_max:
+        x_min, x_max = x_max, x_min
+    if y_min > y_max:
+        y_min, y_max = y_max, y_min
+        
+    crop_region: CropRegion = (x_min, x_max, y_min, y_max)
+    _crop_region_cache[cache_key] = crop_region
+    
+    return crop_region
 
-    left = max(int((cx + offset - patch_width).item()), 0)
-    right = max(int((cx - offset).item()), 0)
-    top = max(int((cy + offset - patch_height).item()), 0)
-    bottom = max(int((cy - offset).item()), 0)
 
-    if left > right:
-        left, right = right, left
-    if top > bottom:
-        top, bottom = bottom, top
-
-    x = left if left == right else torch.randint(left, right + 1, (1,)).item()
-    y = top if top == bottom else torch.randint(top, bottom + 1, (1,)).item()
-
-    return int(x), int(y)
+def _calculate_random_crop_bounds_optimized(cx: Tensor, cy: Tensor, d: Tensor) -> tuple[int, int]:
+    """Optimized version using pre-calculated crop regions."""
+    cx_val = cx.item()
+    cy_val = cy.item() 
+    d_val = d.item()
+    
+    x_min, x_max, y_min, y_max = _get_or_calculate_crop_region(cx_val, cy_val, d_val)
+    
+    # Generate random coordinates with minimal operations
+    x = x_min if x_min == x_max else int(torch.randint(x_min, x_max + 1, (1,), dtype=torch.int32).item())
+    y = y_min if y_min == y_max else int(torch.randint(y_min, y_max + 1, (1,), dtype=torch.int32).item())
+    
+    return x, y
 
 
 def _adjust_crop_bounds(start_x: int, start_y: int) -> tuple[int, int, int, int]:
@@ -113,7 +178,7 @@ def crop_image_random_with_ball(image: Tensor, label: Tensor) -> tuple[Tensor, T
     """Randomly crop image patch ensuring ball remains visible, working with CHW format."""
     cx, cy, d = label[0], label[1], label[2]
 
-    start_x, start_y = _calculate_random_crop_bounds(cx, cy, d)
+    start_x, start_y = _calculate_random_crop_bounds_optimized(cx, cy, d)
     start_x, start_y, end_x, end_y = _adjust_crop_bounds(start_x, start_y)
 
     # Work with CHW format: image shape is (C, H, W)
@@ -288,7 +353,7 @@ def create_dataset(
         dataset,
         batch_size=batch_size,
         shuffle=trainset,
-        num_workers=multiprocessing.cpu_count() // 2,
+        num_workers=multiprocessing.cpu_count(),
         pin_memory=True,
         persistent_workers=True if len(images) > 100 else False,
     )
@@ -348,7 +413,7 @@ def create_dataset_image_based(
         dataset,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=multiprocessing.cpu_count() // 2,
+        num_workers=multiprocessing.cpu_count(),
         pin_memory=True,
         collate_fn=patch_collate_fn,
         persistent_workers=True if len(images) > 100 else False,
