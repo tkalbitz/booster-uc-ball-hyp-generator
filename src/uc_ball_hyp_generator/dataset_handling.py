@@ -125,7 +125,7 @@ def crop_image_random_with_ball(image: Tensor, label: Tensor) -> tuple[Tensor, T
 
 def patchify_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """Split image into patches with adjusted labels using vectorized operations.
-    
+
     LEGACY function for HWC processing - kept for backward compatibility.
     New code should use patchify_image_chw() for better performance.
     """
@@ -162,45 +162,45 @@ def patchify_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
 
 def patchify_image_chw(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """OPTIMIZED: Split CHW image into NCHW patches, eliminating permutations.
-    
+
     Args:
         image: CHW format tensor (C, H, W)
         label: Label tensor (cx, cy, d)
-        
+
     Returns:
         patches: NCHW format tensor (num_patches, C, patch_H, patch_W)
         labels: Adjusted labels tensor (num_patches, 3)
     """
     cx, cy, d = label[0], label[1], label[2]
-    
+
     # Image is in CHW format: (C, H, W)
     patches_y = image.shape[1] // patch_height  # H dimension
-    patches_x = image.shape[2] // patch_width   # W dimension
-    
+    patches_x = image.shape[2] // patch_width  # W dimension
+
     # Use unfold to extract patches in CHW format
     # unfold on H dimension (dim=1), then W dimension (dim=2)
     patches = image.unfold(1, patch_height, patch_height).unfold(2, patch_width, patch_width)
     # patches shape: (C, patches_y, patches_x, patch_height, patch_width)
-    
+
     # Reshape to (num_patches, C, patch_height, patch_width) - NCHW format
     patches = patches.permute(1, 2, 0, 3, 4).contiguous().view(-1, image.shape[0], patch_height, patch_width)
-    
-    # Create coordinate grids for vectorized label computation  
+
+    # Create coordinate grids for vectorized label computation
     y_coords = torch.arange(patches_y, dtype=torch.float32) * patch_height
     x_coords = torch.arange(patches_x, dtype=torch.float32) * patch_width
-    
+
     # Create meshgrid and flatten to match patch order
     yy, xx = torch.meshgrid(y_coords, x_coords, indexing="ij")
     xx_flat = xx.flatten()
     yy_flat = yy.flatten()
-    
+
     # Vectorized label adjustment
     adjusted_cx = cx - xx_flat
     adjusted_cy = cy - yy_flat
     d_repeated = d.expand(len(xx_flat))
-    
+
     labels = torch.stack([adjusted_cx, adjusted_cy, d_repeated], dim=1)
-    
+
     return patches, labels
 
 
@@ -309,16 +309,16 @@ class BallPatchDataset(Dataset[tuple[Tensor, Tensor]]):
         label_tuple = self.labels[idx]
 
         image, label_tensor = load_image(image_path, label_tuple)
-        
+
         # OPTIMIZED: Direct CHW patchification - no permutations!
         patches, patch_labels = patchify_image_chw(image, label_tensor)  # CHW → NCHW
-        
+
         # OPTIMIZED: Direct CHW color conversion - no permutations!
         augmented_patches = rgb2yuv_chw_normalized(patches)  # NCHW → NCHW conversion
-        
+
         # Apply final adjustments using batch processing
         augmented_patches_normalized, final_labels = final_adjustments_patches(augmented_patches, patch_labels)
-        
+
         # Already in NCHW format - no permutation needed!
         return augmented_patches_normalized, final_labels
 
