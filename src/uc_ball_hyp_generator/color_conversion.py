@@ -21,7 +21,6 @@ YUV_BIAS = torch.tensor([0, 128, 128], dtype=torch.float32)
 RGB_BIAS = torch.tensor([-179.45477266423404, 135.45870971679688, -226.8183044444304], dtype=torch.float32)
 
 
-@torch.compile
 def rgb2yuv_normalized(rgb: Tensor) -> Tensor:
     """OPTIMIZED: Convert RGB to YUV eliminating redundant [0,1]→[0,255]→[0,1] scaling.
 
@@ -56,7 +55,6 @@ def rgb2yuv_normalized(rgb: Tensor) -> Tensor:
     return yuv
 
 
-@torch.compile
 def yuv2rgb_normalized(yuv: Tensor) -> Tensor:
     """OPTIMIZED: Convert YUV to RGB eliminating redundant scaling operations."""
     device = yuv.device
