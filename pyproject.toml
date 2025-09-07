@@ -1,5 +1,5 @@
 [project]
-name = "naoteam_boost_uc_ball_hyp_generator"
+name = "uc-ball-hyp-generator"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -15,7 +15,7 @@ dependencies = [
     "tensorboard>=2.0.0",
     "tensorrt>=8.0.0",
     "torchinfo>=1.8.0",
-    "naoteamhtwk-machinelearning-visualizer",
+    "naoteamhtwk_machinelearning_visualizer>=0.2.0",
 ]
 
 [dependency-groups]
@@ -30,6 +30,10 @@ line-length = 120
 [tool.uv]
 package = true
 
+[build-system]
+requires = ["uv_build>=0.8.13,<0.9.0"]
+build-backend = "uv_build"
+
 [[tool.uv.index]]
 name = "pytorch-cpu"
 url = "https://download.pytorch.org/whl/cpu"
@@ -38,7 +42,7 @@ explicit = true
 [tool.uv.sources]
 torch = [{ index = "pytorch-cpu" }]
 torchvision = [{ index = "pytorch-cpu" }]
-naoteamhtwk-machinelearning-visualizer = { git = "ssh://git@github.com/tkalbitz/naoteam-machine-learning-visualizer.git" }
+naoteamhtwk_machinelearning_visualizer = { git = "ssh://git@github.com/tkalbitz/naoteam-machine-learning-visualizer.git" }
 
 [tool.mypy]
 exclude = ["^model/$", '^logs/$']

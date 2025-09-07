@@ -293,23 +293,59 @@ uv run python inference_tensorrt.py model_int8.engine --benchmark 1000
 
 ## Visualization
 
-### Interactive Visualization
+### Ball Detection Visualizer (Recommended)
 
-View model predictions interactively:
+**IMPORTANT**: Use the modern ball detection visualizer for the best experience!
+
+The visualizer package automatically creates a full-featured GUI with image loading, navigation, zoom controls, and ball detection visualization:
+
+```bash
+# Launch the visualizer with your images and trained model
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/visualization/launch_ball_visualizer.py /path/to/images /path/to/model.pth
+```
+
+Example:
+```bash
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/visualization/launch_ball_visualizer.py ~/BallImages model/yuv_2025-09-03-22-29-11/weights.acc.299-0.982143.pth
+```
+
+**The visualizer package will automatically:**
+- Create a professional GUI window
+- Load and display images from your directory
+- Run ball detection on each image
+- Show detection results as orange circles overlaid on images
+- Provide image navigation, zoom, and pan controls
+- Handle all user interaction seamlessly
+
+### Alternative: Direct Command Line
+
+You can also run the visualizer module directly:
+
+```bash
+# Set model path and launch directly
+BALL_MODEL_PATH=/path/to/model.pth PYTHONPATH=src uv run python -m naoteamhtwk_machinelearning_visualizer --input /path/to/images --adapter uc_ball_hyp_generator.visualization.ball_detection_adapter
+```
+
+### Legacy Visualization (matplotlib)
+
+For development/debugging, you can still use the old matplotlib-based visualizer:
 
 ```bash
 cd src
 uv run python visualize_model.py
 ```
 
-Features:
-- Side-by-side comparison of different models
-- Real-time prediction overlay on test images
-- Click to advance through test dataset
-- Color-coded predictions (blue=ground truth, red/green=predictions)
+### Visualization Features
 
-### Visualization Controls
+**Modern Visualizer (Recommended):**
+- **Professional GUI** with toolbar and status bar
+- **Image navigation** with keyboard shortcuts and mouse controls
+- **Zoom and pan** functionality
+- **Orange circles** showing detected ball positions
+- **Automatic image loading** from directories
+- **Real-time processing** as you navigate between images
 
+**Legacy Visualizer:**
 - **Blue circles**: Ground truth ball positions
 - **Red circles**: Loss-optimized model predictions  
 - **Green circles**: Accuracy-optimized model predictions
