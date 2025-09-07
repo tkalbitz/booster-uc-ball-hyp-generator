@@ -16,13 +16,7 @@ from naoteamhtwk_machinelearning_visualizer.core.shapes import Annotation, Ellip
 from PIL import Image
 
 import uc_ball_hyp_generator.models as models
-from uc_ball_hyp_generator.config import (
-    img_scaled_height,
-    img_scaled_width,
-    patch_height,
-    patch_width,
-    scale_factor_f,
-)
+from uc_ball_hyp_generator.config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
 from uc_ball_hyp_generator.dataset_handling import rgb2yuv_optimized
 from uc_ball_hyp_generator.scale import unscale_x, unscale_y
 
@@ -37,7 +31,7 @@ _model_path = None
 @dataclass
 class PreprocessedImage:
     """Container for preprocessed image data with patches and metadata."""
-    
+
     patch_batch: torch.Tensor  # (num_patches, C, H, W) tensor of all image patches
     original_size: tuple[int, int]  # (width, height) of original image
     patch_positions: list[tuple[int, int]]  # List of (start_x, start_y) for each patch
@@ -120,8 +114,8 @@ def _preprocess_image(image_path: str) -> PreprocessedImage:
     patches_y = img_scaled_height // patch_height
     patches_x = img_scaled_width // patch_width
 
-    patches = []
-    patch_positions = []
+    patches: list[torch.Tensor] = []
+    patch_positions: list[tuple[int, int]] = []
 
     for py in range(patches_y):
         for px in range(patches_x):
@@ -143,21 +137,20 @@ def _preprocess_image(image_path: str) -> PreprocessedImage:
     # Stack all patches into a batch
     patch_batch = torch.stack(patches)  # (num_patches, C, H, W)
 
-    return PreprocessedImage(
-        patch_batch=patch_batch,
-        original_size=original_size,
-        patch_positions=patch_positions
-    )
+    return PreprocessedImage(patch_batch=patch_batch, original_size=original_size, patch_positions=patch_positions)
 
 
 def _postprocess_predictions(predictions: torch.Tensor, preprocessed: PreprocessedImage) -> list[Annotation]:
     """Convert model predictions to visualization annotations."""
-    annotations = []
+    annotations: list[Annotation] = []
+
+    _logger.info("Original size %d/%d.", preprocessed.original_size[0], preprocessed.original_size[1])
 
     # Filter predictions to only include likely ball detections
     # We'll use a threshold approach - only show patches where the model is confident
     for i, (pred_x, pred_y) in enumerate(predictions):
         patch_start_x, patch_start_y = preprocessed.patch_positions[i]
+        _logger.info("Path start: x=%d y=%d", patch_start_x, patch_start_y)
 
         # Unscale the coordinates (convert from model output space to patch coordinates)
         ball_x_patch = float(unscale_x(pred_x.item()))
@@ -194,7 +187,7 @@ def _postprocess_predictions(predictions: torch.Tensor, preprocessed: Preprocess
             # Use different colors for patches to help debugging if needed
             annotation = Annotation(
                 shape=shape,
-                text=f"ball_p{i}",  # Include patch index for debugging
+                text=f"ball_p[{i // 4}:{i % 4}]",  # Include patch index for debugging
                 accuracy=None,  # This model doesn't provide confidence scores
                 color="#FF4500",  # Orange color for ball
                 outline_color="#FFFFFF",  # White outline
@@ -226,7 +219,7 @@ def adapter(image_paths: list[str]) -> list[VisualizationResult]:
             for path in image_paths
         ]
 
-    results = []
+    results: list[VisualizationResult] = []
 
     for image_path in image_paths:
         try:
