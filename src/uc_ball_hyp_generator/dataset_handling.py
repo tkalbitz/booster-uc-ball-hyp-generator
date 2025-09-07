@@ -10,6 +10,7 @@ from PIL import Image
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 
+from uc_ball_hyp_generator.color_conversion import rgb2yuv_normalized
 from uc_ball_hyp_generator.config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
 from uc_ball_hyp_generator.scale import scale_x, scale_y
 
@@ -170,7 +171,7 @@ def train_augment_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
 
     # Convert to YUV - need HWC format temporarily for color conversion
     image_hwc = image.permute(1, 2, 0)  # CHW to HWC for color conversion
-    yuv_hwc = rgb2yuv(image_hwc * 255.0)
+    yuv_hwc = rgb2yuv_normalized(image_hwc)  # Direct [0,1] range conversion
     yuv_chw = yuv_hwc.permute(2, 0, 1)  # Back to CHW
 
     return yuv_chw, label
@@ -180,7 +181,7 @@ def test_augment_image(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     """Apply test augmentations (RGB to YUV conversion only), working with CHW format."""
     # Convert to YUV - need HWC format temporarily for color conversion
     image_hwc = image.permute(1, 2, 0)  # CHW to HWC for color conversion
-    yuv_hwc = rgb2yuv(image_hwc * 255.0)
+    yuv_hwc = rgb2yuv_normalized(image_hwc)  # Direct [0,1] range conversion
     yuv_chw = yuv_hwc.permute(2, 0, 1)  # Back to CHW
 
     return yuv_chw, label
@@ -191,7 +192,7 @@ def final_adjustments(image: Tensor, label: Tensor) -> tuple[Tensor, Tensor]:
     x = scale_x(label[0] - patch_width / 2)
     y = scale_y(label[1] - patch_height / 2)
 
-    return image / 255.0, torch.tensor([x, y, label[2]])
+    return image, torch.tensor([x, y, label[2]])  # No scaling needed - already in [0,1] range
 
 
 def final_adjustments_patches(image: Tensor, labels: Tensor) -> tuple[Tensor, Tensor]:
@@ -201,7 +202,7 @@ def final_adjustments_patches(image: Tensor, labels: Tensor) -> tuple[Tensor, Te
 
     x_tensor = torch.as_tensor(x)
     y_tensor = torch.as_tensor(y)
-    return image / 255.0, torch.stack([x_tensor, y_tensor, labels[:, 2]], dim=1)
+    return image, torch.stack([x_tensor, y_tensor, labels[:, 2]], dim=1)  # No scaling needed - already in [0,1] range
 
 
 class BallDataset(Dataset):
@@ -270,8 +271,7 @@ class BallPatchDataset(Dataset[tuple[Tensor, Tensor]]):
         # patches shape: (num_patches, patch_height, patch_width, channels)
 
         # Convert all patches to YUV color space in batch
-        patches_scaled = patches * 255.0
-        augmented_patches = rgb2yuv(patches_scaled)
+        augmented_patches = rgb2yuv_normalized(patches)  # Direct [0,1] range conversion
 
         # Apply final adjustments using batch processing
         augmented_patches_normalized, final_labels = final_adjustments_patches(augmented_patches, patch_labels)
@@ -314,72 +314,8 @@ def create_dataset_image_based(
     )
 
 
-# Pre-computed transformation matrices as constants
-RGB_TO_YUV_MATRIX = torch.tensor(
-    [[0.299, -0.169, 0.498], [0.587, -0.331, -0.419], [0.114, 0.499, -0.0813]], dtype=torch.float32
-)
-
-YUV_TO_RGB_MATRIX = torch.tensor(
-    [
-        [1.0, 1.0, 1.0],
-        [-0.000007154783816076815, -0.3441331386566162, 1.7720025777816772],
-        [1.4019975662231445, -0.7141380310058594, 0.00001542569043522235],
-    ],
-    dtype=torch.float32,
-)
-
-YUV_BIAS = torch.tensor([0, 128, 128], dtype=torch.float32)
-RGB_BIAS = torch.tensor([-179.45477266423404, 135.45870971679688, -226.8183044444304], dtype=torch.float32)
-
-
-def rgb2yuv_optimized(rgb: Tensor) -> Tensor:
-    """Optimized RGB to YUV color space conversion."""
-    device = rgb.device
-    dtype = rgb.dtype
-
-    # Move matrices to device if needed
-    transform_matrix = RGB_TO_YUV_MATRIX.to(device=device, dtype=dtype)
-    bias = YUV_BIAS.to(device=device, dtype=dtype)
-
-    # More efficient tensor operations - avoid unnecessary reshaping
-    # Use einsum for better performance on matrix multiplication
-    if len(rgb.shape) == 4:  # Batch of images: (N, H, W, 3)
-        yuv = torch.einsum("nhwc,kc->nhwk", rgb, transform_matrix)
-    else:  # Single image: (H, W, 3)
-        yuv = torch.einsum("hwc,kc->hwk", rgb, transform_matrix)
-
-    yuv = yuv + bias
-    return yuv
-
-
-def yuv2rgb_optimized(yuv: Tensor) -> Tensor:
-    """Optimized YUV to RGB color space conversion."""
-    device = yuv.device
-    dtype = yuv.dtype
-
-    # Move matrices to device if needed
-    transform_matrix = YUV_TO_RGB_MATRIX.to(device=device, dtype=dtype)
-    bias = RGB_BIAS.to(device=device, dtype=dtype)
-
-    # More efficient tensor operations
-    if len(yuv.shape) == 4:  # Batch of images: (N, H, W, 3)
-        rgb = torch.einsum("nhwc,kc->nhwk", yuv, transform_matrix)
-    else:  # Single image: (H, W, 3)
-        rgb = torch.einsum("hwc,kc->hwk", yuv, transform_matrix)
-
-    rgb = rgb + bias
-    return rgb
-
-
-# Backward compatibility aliases - gradually migrate to optimized versions
-def rgb2yuv(rgb: Tensor) -> Tensor:
-    """Convert RGB to YUV color space (backward compatibility wrapper)."""
-    return rgb2yuv_optimized(rgb)
-
-
-def yuv2rgb(yuv: Tensor) -> Tensor:
-    """Convert YUV to RGB color space (backward compatibility wrapper)."""
-    return yuv2rgb_optimized(yuv)
+# Color conversion functions moved to uc_ball_hyp_generator.color_conversion module
+# Import rgb2yuv_normalized, rgb2yuv_255, etc. from there for color space conversions
 
 
 def show_dataset(ds: DataLoader) -> None:

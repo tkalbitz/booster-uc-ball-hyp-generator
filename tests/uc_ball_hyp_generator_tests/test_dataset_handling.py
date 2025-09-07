@@ -8,6 +8,7 @@ import numpy as np
 import torch
 from PIL import Image
 
+from uc_ball_hyp_generator.color_conversion import rgb2yuv, yuv2rgb, rgb2yuv_255, yuv2rgb_255
 from uc_ball_hyp_generator.dataset_handling import (
     BallDataset,
     _adjust_crop_bounds,
@@ -19,8 +20,6 @@ from uc_ball_hyp_generator.dataset_handling import (
     final_adjustments_patches,
     load_image,
     patch_collate_fn,
-    rgb2yuv,
-    yuv2rgb,
 )
 
 
@@ -199,7 +198,8 @@ def test_crop_image_random_with_ball() -> None:
 
 def test_final_adjustments() -> None:
     """Test final_adjustments function."""
-    image = torch.ones((3, 30, 40)) * 255.0  # Scale 0-255
+    # UPDATED: After optimization, final_adjustments expects YUV image already in [0,1] range
+    image = torch.ones((3, 30, 40)) * 1.0  # YUV image in [0,1] range (post color conversion)
     label = torch.tensor([20.0, 15.0, 10.0])
 
     with (
@@ -213,7 +213,7 @@ def test_final_adjustments() -> None:
 
         adjusted_image, adjusted_label = final_adjustments(image, label)
 
-        # Check image normalization
+        # UPDATED: Image is no longer divided by 255 in final_adjustments (optimization removed this)
         assert torch.allclose(adjusted_image, torch.ones((3, 30, 40)))
 
         # Check label adjustments
@@ -224,7 +224,8 @@ def test_final_adjustments() -> None:
 
 def test_final_adjustments_patches() -> None:
     """Test final_adjustments_patches function."""
-    image = torch.ones((4, 30, 40, 3)) * 255.0  # Batch format
+    # UPDATED: After optimization, final_adjustments_patches expects YUV image already in [0,1] range
+    image = torch.ones((4, 30, 40, 3)) * 1.0  # YUV patches in [0,1] range (post color conversion)
     labels = torch.tensor([[20.0, 15.0, 10.0], [25.0, 20.0, 12.0], [30.0, 25.0, 8.0], [35.0, 30.0, 15.0]])
 
     with (
@@ -238,7 +239,7 @@ def test_final_adjustments_patches() -> None:
 
         adjusted_image, adjusted_labels = final_adjustments_patches(image, labels)
 
-        # Check image normalization
+        # UPDATED: Image is no longer divided by 255 in final_adjustments_patches (optimization removed this)
         assert torch.allclose(adjusted_image, torch.ones((4, 30, 40, 3)))
 
         # Check label adjustments

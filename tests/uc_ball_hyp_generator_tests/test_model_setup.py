@@ -275,13 +275,13 @@ def test_create_training_components() -> None:
     log_dir = "/tmp/test_logs"
 
     with (
-        patch("uc_ball_hyp_generator.model_setup.optim.Adam") as mock_adam,
+        patch("uc_ball_hyp_generator.model_setup.optim.AdamW") as mock_adamw,
         patch("uc_ball_hyp_generator.model_setup.optim.lr_scheduler.ReduceLROnPlateau") as mock_scheduler,
         patch("uc_ball_hyp_generator.model_setup.SummaryWriter") as mock_writer,
         patch("builtins.open", mock_open()) as mock_file,
     ):
         mock_optimizer = Mock()
-        mock_adam.return_value = mock_optimizer
+        mock_adamw.return_value = mock_optimizer
         mock_sched = Mock()
         mock_scheduler.return_value = mock_sched
         mock_sw = Mock()
@@ -295,10 +295,10 @@ def test_create_training_components() -> None:
         assert scheduler is mock_sched
         assert writer is mock_sw
 
-        # Verify Adam optimizer was called with correct parameters
+        # Verify AdamW optimizer was called with correct parameters
         # We can't directly compare generators, so check call was made with right types
-        mock_adam.assert_called_once()
-        call_args = mock_adam.call_args
+        mock_adamw.assert_called_once()
+        call_args = mock_adamw.call_args
         assert call_args[1]["lr"] == 0.001
         assert call_args[1]["amsgrad"] is True
 
