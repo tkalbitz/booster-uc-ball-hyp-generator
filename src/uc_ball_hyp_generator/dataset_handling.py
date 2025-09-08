@@ -75,8 +75,8 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         """Precompute all test patches and points for GPU caching."""
         for idx in range(len(self.images)):
             patch, point = self._process_test_sample(idx)
-            self._test_patches.append(patch.to(self.device))
-            self._test_points.append(point.to(self.device))
+            self._test_patches.append(patch)
+            self._test_points.append(point)
 
     def _process_test_sample(self, idx: int) -> tuple[Tensor, Tensor]:
         """Process single test sample without caching to GPU."""
