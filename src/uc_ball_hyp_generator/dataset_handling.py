@@ -275,7 +275,7 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         # Convert RGB to YUV using Kornia
         patch_yuv = kornia.color.rgb_to_yuv(patch.unsqueeze(0)).squeeze(0)
 
-        point = torch.tensor([point_x_scaled, point_y_scaled, diameter], dtype=torch.float32, device=self.device)
+        point = torch.tensor([point_x_scaled, point_y_scaled, diameter], dtype=torch.float32)
 
         return patch_yuv, point
 
