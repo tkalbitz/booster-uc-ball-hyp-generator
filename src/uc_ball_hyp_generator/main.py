@@ -2,7 +2,6 @@
 
 import numpy as np
 import torch
-import torch.multiprocessing as mp
 
 import uc_ball_hyp_generator.training as training
 from uc_ball_hyp_generator.config import image_dir, testset_csv_collection, trainingset_csv_collection
@@ -16,7 +15,7 @@ from uc_ball_hyp_generator.training import run_training_loop
 def main() -> None:
     """Main training function."""
     _logger = setup_logger(__name__)
-    mp.set_start_method("spawn")
+    # mp.set_start_method("spawn")
 
     # Set random seed for reproducibility
     torch.manual_seed(1)

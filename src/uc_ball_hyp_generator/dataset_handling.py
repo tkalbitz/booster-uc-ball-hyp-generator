@@ -240,7 +240,7 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
 
         # Load and scale image with cached center point and diameter
         image, center_x, center_y, diameter = self._load_and_scale_image(image_path, bbox)
-        image = image.to(self.device)
+        # image = image.to(self.device)
 
         # Get safe crop bounds
         start_x, start_y = self._get_safe_crop_bounds(center_x, center_y, bbox)
@@ -306,7 +306,7 @@ def create_dataset(
         batch_size=batch_size,
         shuffle=trainset,
         num_workers=multiprocessing.cpu_count(),
-        pin_memory=False,
+        pin_memory=True,
         prefetch_factor=4,
         persistent_workers=True,
     )
