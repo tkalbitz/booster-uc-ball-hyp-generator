@@ -225,8 +225,8 @@ def run_training_loop(
         val_time = time.time() - val_start_time
 
         min_loss = min(min_loss, val_loss)
-        max_accuracy = max(max_accuracy, max(train_acc, val_acc))
-        max_found_balls = max(max_found_balls, max(train_found_balls, val_found_balls))
+        max_accuracy = max(max_accuracy, val_acc)
+        max_found_balls = max(max_found_balls, val_found_balls)
 
         log_epoch_metrics(
             epoch,
