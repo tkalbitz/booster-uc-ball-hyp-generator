@@ -2,11 +2,11 @@
 
 import multiprocessing
 from pathlib import Path
-from typing import Any
 
 import blake3
 import kornia
 import torch
+import torchvision.transforms.v2 as transforms_v2  # type: ignore[import-untyped]
 from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 from torchvision.io import ImageReadMode, decode_image  # type: ignore[import-untyped]
@@ -63,12 +63,7 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         self.training = training
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        # GPU-native brightness augmentation using Kornia
-        self._brightness_jitter: Any = kornia.augmentation.ColorJitter(brightness=0.2, p=1.0)
-
-        # Enable Kornia augmentations to work with device
-        if hasattr(self._brightness_jitter, "to"):
-            self._brightness_jitter = self._brightness_jitter.to(self.device)
+        self._brightness_jitter = transforms_v2.ColorJitter(brightness=0.2)
 
         # For test mode: precompute and cache all patches
         if not training:
@@ -146,21 +141,18 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
             except (OSError, KeyError):
                 pass
 
-        # Load and process image with GPU-native pipeline
+        # Load and process image
         image_tensor = decode_image(image_path, mode=ImageReadMode.RGB)
 
-        # GPU-native processing: move to device, convert to float32 and resize using Kornia
-        image_tensor = image_tensor.to(self.device)
+        # Convert from uint8 [0, 255] to float32 [0, 1] and resize
+        transform = transforms_v2.Compose(
+            [
+                transforms_v2.ToDtype(torch.float32, scale=True),
+                transforms_v2.Resize((img_scaled_height, img_scaled_width), antialias=True),
+            ]
+        )
 
-        # Convert from uint8 [0, 255] to float32 [0, 1]
-        processed_image = image_tensor.float() / 255.0
-
-        # Resize using Kornia (GPU-native)
-        processed_image = kornia.geometry.transform.resize(
-            processed_image.unsqueeze(0),  # Add batch dimension
-            (img_scaled_height, img_scaled_width),
-            antialias=True,
-        ).squeeze(0)  # Remove batch dimension
+        processed_image = transform(image_tensor)
 
         # Calculate scaled bbox and center point
         x1_scaled = float(bbox[0]) / scale_factor
@@ -246,8 +238,9 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         image_path = self.images[idx]
         bbox = self.labels[idx]
 
-        # Load and scale image with cached center point and diameter (already on GPU)
+        # Load and scale image with cached center point and diameter
         image, center_x, center_y, diameter = self._load_and_scale_image(image_path, bbox)
+        image = image.to(self.device)
 
         # Get safe crop bounds
         start_x, start_y = self._get_safe_crop_bounds(center_x, center_y, bbox)
@@ -257,8 +250,8 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         # Use simple tensor crop for now (GPU accelerated through tensor operations)
         patch = image[:, start_y:end_y, start_x:end_x]
 
-        # GPU-native brightness augmentation using Kornia
-        patch = self._brightness_jitter(patch.unsqueeze(0)).squeeze(0)
+        # Brightness augmentation
+        patch = self._brightness_jitter(patch)
 
         # Calculate absolute position in patch
         abs_x_in_patch = center_x - start_x
@@ -408,33 +401,28 @@ RGB → YUV444 use GPU optimized conversion from Kornia (kornia.color.rgb_to_yuv
 - Wherever the center of the bbox falls is the patch to use in test mode
 
 8. AUGMENTATION DETAILS
-- Brightness augmentation: GPU-native ColorJitter using kornia.augmentation.ColorJitter with brightness=0.2 (fixed, not configurable)
+- Brightness augmentation: ColorJitter with brightness=0.2 (fixed, not configurable)
 - Horizontal flip augmentation: 50% probability random horizontal flip with point coordinate adjustment
 - Point coordinate adjustment for horizontal flip: abs_x_in_patch = patch_width - abs_x_in_patch (before scale_x)
 - Applied only in training mode, not in test mode
-- All augmentations are GPU-native using Kornia for optimal performance
 
 9. ADDITIONAL CLARIFICATIONS FROM IMPLEMENTATION
 - Image loading: Use torchvision.io.decode_image with ImageReadMode.RGB for direct RGB tensor loading
-- Image processing: GPU-native pipeline using Kornia for resize operations (kornia.geometry.transform.resize)
 - Color conversion: Use kornia.color.rgb_to_yuv for GPU-accelerated conversion
-- Augmentations: GPU-native using kornia.augmentation module for all augmentation operations
 - Random crop bounds: Use torch.randint for GPU-friendly random number generation
 - Safe crop calculation: Ensure bbox (potentially clipped) stays within randomly cropped patch
 - Test mode caching: Store tensors directly on specified device for immediate access
-- GPU acceleration: Complete GPU-native pipeline from image loading to final tensor output
-- Image processing caching: Cache GPU-processed images and computed center points for performance
+- GPU acceleration: Leverage tensor operations on device for maximum performance
+- Image processing caching: Cache downscaled images and computed center points for performance
 
-10. IMAGE LOADING AND PROCESSING SPECIFICATION
-GPU-Native Image Processing Pipeline:
-- Loading: torchvision.io.decode_image(input, mode=ImageReadMode.RGB)
+10. IMAGE LOADING SPECIFICATION
+Use torchvision.io.decode_image() for image loading:
+- Function: torchvision.io.decode_image(input, mode=ImageReadMode.RGB)
 - Output: Tensor[image_channels, image_height, image_width] in uint8 [0, 255]
 - Supported formats: JPEG, PNG, GIF, WebP
 - Mode: Use ImageReadMode.RGB for consistent 3-channel RGB output
-- GPU Transfer: Immediate transfer to target device after loading
-- Type conversion: GPU-native float32 conversion using tensor.float() / 255.0
-- Resize: GPU-native using kornia.geometry.transform.resize with antialias=True
-- Benefits: Complete GPU pipeline, minimal CPU-GPU transfers, maximum performance
+- Post-processing: Convert from uint8 [0, 255] to float32 [0, 1] using transforms_v2.ToDtype(torch.float32, scale=True)
+- Benefits: Direct tensor output, no PIL dependency, better performance, native PyTorch integration
 
 11. CACHING SYSTEM SPECIFICATION
 Image processing results are cached for performance:
