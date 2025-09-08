@@ -115,14 +115,13 @@ def log_epoch_metrics(
 ) -> None:
     """Log epoch metrics to console, TensorBoard, and CSV."""
     _logger.info(
-        "Epoch %d/%d: Min Loss: %.6f, Max Acc: %.6f, Max Balls: %.6f Train %.2fs Test %.2fs",
+        "Epoch %d/%d: Min Loss: %.6f, Max Acc: %.6f, Max Balls: %.6f Dur: %.2fs",
         epoch + 1,
         epochs,
         min_loss,
         max_accuracy,
         max_found_balls,
-        train_time,
-        val_time,
+        train_time + val_time,
     )
     _logger.info(
         "Train - Loss: %.6f, Acc: %.6f, Found Balls: %.6f",
