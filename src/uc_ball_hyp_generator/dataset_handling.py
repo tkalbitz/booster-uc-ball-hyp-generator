@@ -188,7 +188,10 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
     def _get_safe_crop_bounds(
         self, center_x: float, center_y: float, bbox: tuple[int, int, int, int]
     ) -> tuple[int, int]:
-        """Calculate safe crop bounds ensuring bbox stays inside patch."""
+        """Calculate safe crop bounds ensuring bbox stays inside patch with safety margin."""
+        # Safety margin as percentage of bbox size (configurable)
+        safety_margin_percent = 0.05  # margin around bbox
+
         # Scale bbox to downscaled coordinates
         x1_scaled = bbox[0] / scale_factor
         y1_scaled = bbox[1] / scale_factor
@@ -198,20 +201,36 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         bbox_width = x2_scaled - x1_scaled
         bbox_height = y2_scaled - y1_scaled
 
-        # If bbox is larger than patch, clip it
-        if bbox_width > patch_width:
-            x1_scaled = center_x - patch_width / 2
-            x2_scaled = center_x + patch_width / 2
+        # Add safety margin to bbox
+        margin_x = bbox_width * safety_margin_percent
+        margin_y = bbox_height * safety_margin_percent
 
-        if bbox_height > patch_height:
-            y1_scaled = center_y - patch_height / 2
-            y2_scaled = center_y + patch_height / 2
+        # Calculate effective margin - the minimum distance bbox edges should stay from patch edges
+        # Minimum margin in pixels (configurable)
+        min_margin_pixels = 5
 
-        # Calculate valid crop region to keep clipped bbox inside
-        min_start_x = max(0, int(x2_scaled - patch_width))
-        max_start_x = min(img_scaled_width - patch_width, int(x1_scaled))
-        min_start_y = max(0, int(y2_scaled - patch_height))
-        max_start_y = min(img_scaled_height - patch_height, int(y1_scaled))
+        # Calculate percentage-based margin
+        percentage_margin_x = margin_x
+        percentage_margin_y = margin_y
+
+        # Calculate maximum possible margin to keep bbox centered
+        max_possible_margin_x = (patch_width - bbox_width) / 2 if bbox_width < patch_width else 0
+        max_possible_margin_y = (patch_height - bbox_height) / 2 if bbox_height < patch_height else 0
+
+        # Use the larger of percentage margin or minimum pixel margin, but not more than max possible
+        effective_margin_x = min(max(percentage_margin_x, min_margin_pixels), max_possible_margin_x)
+        effective_margin_y = min(max(percentage_margin_y, min_margin_pixels), max_possible_margin_y)
+
+        # Calculate valid crop region ensuring original bbox stays at least effective_margin from patch edges
+        # For x: bbox must be at least effective_margin_x from left/right patch edges
+        # Latest crop start: ensures x1_scaled is at least effective_margin_x from left patch edge
+        max_start_x = min(img_scaled_width - patch_width, int(x1_scaled - effective_margin_x))
+        # Earliest crop start: ensures x2_scaled is at least effective_margin_x from right patch edge
+        min_start_x = max(0, int(x2_scaled + effective_margin_x - patch_width))
+
+        # For y: bbox must be at least effective_margin_y from top/bottom patch edges
+        max_start_y = min(img_scaled_height - patch_height, int(y1_scaled - effective_margin_y))
+        min_start_y = max(0, int(y2_scaled + effective_margin_y - patch_height))
 
         # Ensure valid bounds
         if min_start_x > max_start_x:
@@ -342,7 +361,9 @@ The image must be loaded and downscaled by `scale_factor`
 Training Mode:
 - Random Safe Crop (GPU-accelerated)
 - Crop size: patch_width×patch_height pixels
-- The bbox must always be inside the crop. Except it's bigger than the patch then best effort (clip bbox).
+- The bbox (with safety margin) must always be inside the crop with maximum possible margin preserved
+- Safety margin: percentage of bbox dimensions added around the bounding box (configurable via safety_margin_percent)
+- If bbox+margin > patch size: uses maximum possible margin while keeping original bbox away from patch edges
 - Use GPU-accelerated operations for vectorized computation
 - Points adjusted relative to the crop and scaled using scale_x/scale_y functions
 
@@ -395,7 +416,9 @@ RGB → YUV444 use GPU optimized conversion from Kornia (kornia.color.rgb_to_yuv
 - For training mode: no preloading due to augmentation
 
 7. EDGE CASE HANDLING
-- When bounding boxes are larger than patch_width×patch_height: clip the bounding box
+- When bounding boxes (with safety margin) are larger than patch_width×patch_height: use maximum possible margin
+- Safety margin logic: if full margin fits, use it; otherwise use max margin that keeps original bbox centered in patch
+- Maximum possible margin = min(requested_margin, (patch_size - bbox_size) / 2) to prevent bbox from touching patch edges
 - User ensures image is always big enough (no special case handling needed)
 - In test mode: simple grid division, use patch containing bbox center
 - Wherever the center of the bbox falls is the patch to use in test mode
