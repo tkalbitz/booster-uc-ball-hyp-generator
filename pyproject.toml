@@ -17,6 +17,7 @@ dependencies = [
     "torchinfo>=1.8.0",
     "naoteamhtwk_machinelearning_visualizer>=0.2.1",
     "blake3>=1.0.5",
+    "kornia>=0.8.1",
 ]
 
 [dependency-groups]

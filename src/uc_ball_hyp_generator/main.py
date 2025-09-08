@@ -38,8 +38,8 @@ def main() -> None:
     _logger.info("Trainingset contains %d images, removed %d balls", len(train_img), skipped_trainingset)
     _logger.info("Testset contains %d images, removed %d balls", len(test_img), skipped_testset)
 
-    train_ds = create_dataset(train_img, train_labels, batch_size_train)
-    test_ds = create_dataset(test_img, test_labels, batch_size_test, trainset=False)
+    train_ds = create_dataset(train_img, train_labels, batch_size_train, device=device)
+    test_ds = create_dataset(test_img, test_labels, batch_size_test, device=device, trainset=False)
 
     train_steps_per_epoch = int(len(train_img) / batch_size_train) + 1
     test_steps_per_epoch = int(len(test_img) / batch_size_test)
