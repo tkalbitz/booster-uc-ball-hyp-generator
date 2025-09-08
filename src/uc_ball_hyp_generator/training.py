@@ -1,6 +1,7 @@
 """Training utilities and functions for the ball detection model."""
 
 import os
+import time
 from typing import TextIO
 
 import torch
@@ -104,25 +105,42 @@ def log_epoch_metrics(
     val_loss: float,
     val_acc: float,
     val_found_balls: float,
+    train_time: float,
+    val_time: float,
     writer: SummaryWriter,
     csv_file: TextIO,
+    min_loss: float,
+    max_accuracy: float,
+    max_found_balls: float,
 ) -> None:
     """Log epoch metrics to console, TensorBoard, and CSV."""
     _logger.info(
-        "Epoch %d/%d: Train - Loss: %.6f, Acc: %.6f, Found Balls: %.6f",
+        "Epoch %d/%d: Min Loss: %.6f, Max Acc: %.6f, Max Balls: %.6f Train %.2fs Test %.2fs",
         epoch + 1,
         epochs,
+        min_loss,
+        max_accuracy,
+        max_found_balls,
+        train_time,
+        val_time,
+    )
+    _logger.info(
+        "Train - Loss: %.6f, Acc: %.6f, Found Balls: %.6f",
         train_loss,
         train_acc,
         train_found_balls,
     )
     _logger.info(
-        "Epoch %d/%d: Val   - Loss: %.6f, Acc: %.6f, Found Balls: %.6f",
-        epoch + 1,
-        epochs,
+        "Val   - Loss: %.6f, Acc: %.6f, Found Balls: %.6f",
         val_loss,
         val_acc,
         val_found_balls,
+    )
+    _logger.info(
+        "Best  - Min Loss: %.6f, Max Acc: %.6f, Max Balls: %.6f",
+        min_loss,
+        max_accuracy,
+        max_found_balls,
     )
 
     writer.add_scalar("Loss/Train", train_loss, epoch)
@@ -131,6 +149,8 @@ def log_epoch_metrics(
     writer.add_scalar("Accuracy/Validation", val_acc, epoch)
     writer.add_scalar("FoundBalls/Train", train_found_balls, epoch)
     writer.add_scalar("FoundBalls/Validation", val_found_balls, epoch)
+    writer.add_scalar("Time/Train", train_time, epoch)
+    writer.add_scalar("Time/Validation", val_time, epoch)
 
     csv_file.write(
         f"{epoch + 1},{train_loss},{val_loss},{train_acc},{val_acc},{train_found_balls},{val_found_balls}\\n"
@@ -193,14 +213,27 @@ def run_training_loop(
     patience_counter = 0
     early_stopping_patience = 60
 
+    min_loss = float("inf")
+    max_accuracy = 0.0
+    max_found_balls = 0.0
+
     train_metric = FoundBallMetric()
     val_metric = FoundBallMetric()
 
     for epoch in range(epochs):
+        train_start_time = time.time()
         train_loss, train_acc, train_found_balls = train_epoch(
             model, train_loader, optimizer, criterion, train_metric, device
         )
+        train_time = time.time() - train_start_time
+
+        val_start_time = time.time()
         val_loss, val_acc, val_found_balls = validate_epoch(model, test_loader, criterion, val_metric, device)
+        val_time = time.time() - val_start_time
+
+        min_loss = min(min_loss, val_loss)
+        max_accuracy = max(max_accuracy, max(train_acc, val_acc))
+        max_found_balls = max(max_found_balls, max(train_found_balls, val_found_balls))
 
         log_epoch_metrics(
             epoch,
@@ -211,8 +244,13 @@ def run_training_loop(
             val_loss,
             val_acc,
             val_found_balls,
+            train_time,
+            val_time,
             writer,
             csv_file,
+            min_loss,
+            max_accuracy,
+            max_found_balls,
         )
 
         best_val_loss, best_val_found_balls, patience_counter = save_model_checkpoints(
