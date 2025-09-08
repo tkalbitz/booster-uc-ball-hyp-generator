@@ -197,7 +197,7 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         y2_scaled = bbox[3] / scale_factor
 
         # Minimum distance ball center should stay from patch edges (configurable)
-        min_center_margin_pixels = 2
+        min_center_margin_pixels = 1
 
         # Calculate ball center position
         center_x_scaled = (x1_scaled + x2_scaled) / 2
