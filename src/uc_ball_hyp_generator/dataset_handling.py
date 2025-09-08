@@ -306,7 +306,7 @@ def create_dataset(
         batch_size=batch_size,
         shuffle=trainset,
         num_workers=multiprocessing.cpu_count(),
-        pin_memory=True,
+        pin_memory=False,
         prefetch_factor=4,
         persistent_workers=True,
     )
