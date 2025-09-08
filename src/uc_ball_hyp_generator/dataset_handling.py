@@ -63,7 +63,7 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         self.training = training
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-        self._brightness_jitter = transforms_v2.ColorJitter(brightness=0.2)
+        self._brightness_jitter = transforms_v2.ColorJitter(brightness=0.15)
 
         # For test mode: precompute and cache all patches
         if not training:
@@ -353,7 +353,7 @@ Training Mode:
 - Points adjusted relative to the crop and scaled using scale_x/scale_y functions
 
 Training Augmentations:
-- Brightness augmentation: Use torchvision.transforms.v2.ColorJitter(brightness=0.2)
+- Brightness augmentation: Use torchvision.transforms.v2.ColorJitter(brightness=0.15)
 - Horizontal flip augmentation: 50% probability with point coordinate adjustment
 
 Color Conversion:
@@ -409,7 +409,7 @@ RGB → YUV444 use GPU optimized conversion from Kornia (kornia.color.rgb_to_yuv
 - Wherever the center of the bbox falls is the patch to use in test mode
 
 8. AUGMENTATION DETAILS
-- Brightness augmentation: ColorJitter with brightness=0.2 (fixed, not configurable)
+- Brightness augmentation: ColorJitter with brightness=0.15 (fixed, not configurable)
 - Horizontal flip augmentation: 50% probability random horizontal flip with point coordinate adjustment
 - Point coordinate adjustment for horizontal flip: abs_x_in_patch = patch_width - abs_x_in_patch (before scale_x)
 - Applied only in training mode, not in test mode
