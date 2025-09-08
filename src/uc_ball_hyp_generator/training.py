@@ -135,12 +135,6 @@ def log_epoch_metrics(
         val_acc,
         val_found_balls,
     )
-    _logger.info(
-        "Best  - Min Loss: %.6f, Max Acc: %.6f, Max Balls: %.6f",
-        min_loss,
-        max_accuracy,
-        max_found_balls,
-    )
 
     writer.add_scalar("Loss/Train", train_loss, epoch)
     writer.add_scalar("Loss/Validation", val_loss, epoch)
