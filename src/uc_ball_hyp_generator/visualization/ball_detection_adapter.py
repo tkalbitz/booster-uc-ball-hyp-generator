@@ -18,7 +18,7 @@ from torchvision.io import ImageReadMode, decode_image  # type: ignore[import-un
 
 import uc_ball_hyp_generator.models as models
 from uc_ball_hyp_generator.config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
-from uc_ball_hyp_generator.scale import unscale_x, unscale_y
+from uc_ball_hyp_generator.utils.scale_patch import patch_unscale_x, patch_unscale_y
 
 _logger = logging.getLogger(__name__)
 
@@ -154,8 +154,8 @@ def _postprocess_predictions(predictions: torch.Tensor, preprocessed: Preprocess
     for i, (pred_x, pred_y) in enumerate(predictions):
         patch_start_x, patch_start_y = preprocessed.patch_positions[i]
         # Unscale the coordinates (convert from model output space to patch coordinates)
-        ball_x_patch = float(unscale_x(pred_x.item()))
-        ball_y_patch = float(unscale_y(pred_y.item()))
+        ball_x_patch = float(patch_unscale_x(pred_x.item()))
+        ball_y_patch = float(patch_unscale_y(pred_y.item()))
 
         # Convert from patch-local coordinates to scaled image coordinates
         ball_x_scaled = ball_x_patch + patch_width / 2 + patch_start_x

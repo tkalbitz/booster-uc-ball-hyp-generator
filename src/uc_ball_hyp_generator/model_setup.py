@@ -15,8 +15,8 @@ from torch.utils.tensorboard import SummaryWriter
 from uc_ball_hyp_generator import models as models
 from uc_ball_hyp_generator.config import patch_height, patch_width
 from uc_ball_hyp_generator.logger import get_logger
-from uc_ball_hyp_generator.scale import unscale_x, unscale_y
 from uc_ball_hyp_generator.utils import get_flops
+from uc_ball_hyp_generator.utils.scale_patch import patch_unscale_x, patch_unscale_y
 
 _logger = get_logger(__name__)
 
@@ -36,10 +36,10 @@ class DistanceLoss(nn.Module):
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
         # Vectorized unscaling operations - ensure tensor output
-        y_t_x = unscale_x(y_true[:, 0])
-        y_t_y = unscale_y(y_true[:, 1])
-        y_p_x = unscale_x(y_pred[:, 0])
-        y_p_y = unscale_y(y_pred[:, 1])
+        y_t_x = patch_unscale_x(y_true[:, 0])
+        y_t_y = patch_unscale_y(y_true[:, 1])
+        y_p_x = patch_unscale_x(y_pred[:, 0])
+        y_p_y = patch_unscale_y(y_pred[:, 1])
 
         # Convert to tensors if they aren't already
         if not isinstance(y_t_x, torch.Tensor):

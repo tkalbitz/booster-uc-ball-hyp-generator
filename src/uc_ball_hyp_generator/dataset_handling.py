@@ -20,7 +20,7 @@ from uc_ball_hyp_generator.config import (
     path_count_w,
     scale_factor,
 )
-from uc_ball_hyp_generator.scale import scale_x, scale_y
+from uc_ball_hyp_generator.utils.scale_patch import patch_scale_x, patch_scale_y
 
 # Cache directory for preprocessed tensors
 _cache_dir = Path.home() / ".cache" / "uc_ball_hyp_generator" / "tensors"
@@ -114,8 +114,8 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         y_relative_to_center = abs_y_in_patch - patch_height / 2
 
         # Apply scaling functions
-        point_x_scaled = scale_x(x_relative_to_center)
-        point_y_scaled = scale_y(y_relative_to_center)
+        point_x_scaled = patch_scale_x(x_relative_to_center)
+        point_y_scaled = patch_scale_y(y_relative_to_center)
 
         point = torch.tensor([point_x_scaled, point_y_scaled, diameter], dtype=torch.float32)
 
@@ -274,8 +274,8 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         y_relative_to_center = abs_y_in_patch - patch_height / 2
 
         # Apply scaling functions
-        point_x_scaled = scale_x(x_relative_to_center)
-        point_y_scaled = scale_y(y_relative_to_center)
+        point_x_scaled = patch_scale_x(x_relative_to_center)
+        point_y_scaled = patch_scale_y(y_relative_to_center)
 
         # Convert RGB to YUV using Kornia
         patch_yuv = kornia.color.rgb_to_yuv(patch.unsqueeze(0)).squeeze(0)

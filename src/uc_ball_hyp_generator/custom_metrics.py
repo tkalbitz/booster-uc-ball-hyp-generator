@@ -1,7 +1,7 @@
 import torch
 
 from uc_ball_hyp_generator.config import patch_height, patch_width
-from uc_ball_hyp_generator.scale import unscale_x, unscale_y
+from uc_ball_hyp_generator.utils.scale_patch import patch_unscale_x, patch_unscale_y
 
 
 class FoundBallMetric:
@@ -13,11 +13,11 @@ class FoundBallMetric:
         self, y_true: torch.Tensor, y_pred: torch.Tensor, sample_weight: torch.Tensor | None = None
     ) -> None:
         """Update the metric state with new predictions."""
-        x_t = unscale_x(y_true[:, 0]) + patch_width / 2
-        y_t = unscale_y(y_true[:, 1]) + patch_height / 2
+        x_t = patch_unscale_x(y_true[:, 0]) + patch_width / 2
+        y_t = patch_unscale_y(y_true[:, 1]) + patch_height / 2
 
-        x_p = unscale_x(y_pred[:, 0]) + patch_width / 2
-        y_p = unscale_y(y_pred[:, 1]) + patch_height / 2
+        x_p = patch_unscale_x(y_pred[:, 0]) + patch_width / 2
+        y_p = patch_unscale_y(y_pred[:, 1]) + patch_height / 2
 
         # Ensure tensors are used for torch.sqrt
         x_diff = torch.as_tensor(x_t - x_p)
