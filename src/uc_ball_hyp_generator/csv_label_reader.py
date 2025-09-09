@@ -1,7 +1,7 @@
 import re
 from pathlib import Path
 
-from uc_ball_hyp_generator.logger import get_logger
+from uc_ball_hyp_generator.utils.logger import get_logger
 
 _logger = get_logger(__name__)
 

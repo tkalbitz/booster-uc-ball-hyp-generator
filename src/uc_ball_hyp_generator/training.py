@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from uc_ball_hyp_generator.custom_metrics import FoundBallMetric
 from uc_ball_hyp_generator.early_stopping_on_lr import EarlyStoppingOnLR
-from uc_ball_hyp_generator.logger import get_logger
+from uc_ball_hyp_generator.utils.logger import get_logger
 
 _logger = get_logger(__name__)
 
