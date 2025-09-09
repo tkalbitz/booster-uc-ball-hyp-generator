@@ -204,7 +204,7 @@ def run_training_loop(
     test_loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
     criterion: torch.nn.Module,
-    scheduler: torch.optim.lr_scheduler.ReduceLROnPlateau,
+    scheduler: torch.optim.lr_scheduler.LRScheduler,
     writer: SummaryWriter,
     csv_file: TextIO,
     model_dir: str,
@@ -215,7 +215,7 @@ def run_training_loop(
     best_val_loss = float("inf")
     best_val_found_balls = 0.0
     patience_counter = 0
-    early_stopping_patience = 300
+    early_stopping_patience = 150
 
     min_loss = float("inf")
     max_accuracy = 0.0
@@ -262,7 +262,7 @@ def run_training_loop(
             model, model_dir, epoch, patience_counter, val_loss, val_found_balls, best_val_loss, best_val_found_balls
         )
 
-        scheduler.step(val_loss)
+        scheduler.step()
 
         if early_stopping_on_lr.check_lr(optimizer):
             _logger.info("Early stopping triggered after %d epochs due to lr is 0", epoch + 1)
