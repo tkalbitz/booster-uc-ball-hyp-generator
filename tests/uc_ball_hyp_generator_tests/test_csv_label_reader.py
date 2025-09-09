@@ -4,7 +4,7 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from uc_ball_hyp_generator.csv_label_reader import load_csv_collection, read_csv_label
+from uc_ball_hyp_generator.utils.csv_label_reader import load_csv_collection, read_csv_label
 
 
 def create_temp_csv(content: str) -> Path:
@@ -86,7 +86,7 @@ missing_image_U.png;2;label2;Ball;50;60;70;80;Ball"""
     img_files = {"image1_U.png": "/path/to/image1_U.png"}  # missing_image_U.png not in dict
 
     try:
-        with patch("uc_ball_hyp_generator.csv_label_reader._logger") as mock_logger:
+        with patch("uc_ball_hyp_generator.utils.csv_label_reader._logger") as mock_logger:
             (imgs, labels, lines), skipped = read_csv_label(csv_file, img_files)
 
         assert len(imgs) == 1

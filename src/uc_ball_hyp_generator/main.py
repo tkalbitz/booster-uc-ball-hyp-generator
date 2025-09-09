@@ -5,10 +5,10 @@ import torch
 
 import uc_ball_hyp_generator.training as training
 from uc_ball_hyp_generator.config import image_dir, testset_csv_collection, trainingset_csv_collection
-from uc_ball_hyp_generator.csv_label_reader import load_csv_collection
 from uc_ball_hyp_generator.dataset_handling import create_dataset
 from uc_ball_hyp_generator.model_setup import create_model, create_training_components
 from uc_ball_hyp_generator.training import run_training_loop
+from uc_ball_hyp_generator.utils.csv_label_reader import load_csv_collection
 from uc_ball_hyp_generator.utils.logger import setup_logger
 
 
