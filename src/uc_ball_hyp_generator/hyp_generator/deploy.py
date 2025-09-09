@@ -5,7 +5,7 @@ import torch
 import torch.onnx
 
 from uc_ball_hyp_generator.hyp_generator.config import patch_height, patch_width
-from uc_ball_hyp_generator.hyp_generator.model import NetworkV2
+from uc_ball_hyp_generator.hyp_generator.model import get_ball_hyp_model
 
 # Force CPU for deployment
 device: torch.device = torch.device("cpu")
@@ -21,7 +21,7 @@ if len(sys.argv) == 2:
 
 print(f"Weight file: {weight_file}")
 
-model = NetworkV2(patch_height, patch_width)
+model = get_ball_hyp_model(patch_height, patch_width)
 model.load_state_dict(torch.load(weight_file, map_location=device))
 model.to(device)
 model.eval()

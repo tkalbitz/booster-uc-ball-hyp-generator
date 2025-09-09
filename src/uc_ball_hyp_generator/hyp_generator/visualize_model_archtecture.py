@@ -6,12 +6,12 @@ import torch
 from torchinfo import summary
 
 from uc_ball_hyp_generator.hyp_generator import config
-from uc_ball_hyp_generator.hyp_generator.model import NetworkV2
+from uc_ball_hyp_generator.hyp_generator.model import NetworkV2, get_ball_hyp_model
 
 
 def visualize_model(input_height: int = 480, input_width: int = 640, batch_size: int = 1) -> None:
     """Visualize the NetworkV2 model architecture with layer details and dimensions."""
-    model = NetworkV2(input_height=input_height, input_width=input_width, num_classes=2)
+    model = get_ball_hyp_model(input_height=input_height, input_width=input_width)
 
     input_shape = (batch_size, 3, input_height, input_width)
 
@@ -36,7 +36,7 @@ def visualize_model(input_height: int = 480, input_width: int = 640, batch_size:
 
 def visualize_forward_pass(input_height: int = 224, input_width: int = 224) -> None:
     """Show tensor shapes during forward pass for debugging."""
-    model = NetworkV2(input_height=input_height, input_width=input_width, num_classes=2)
+    model: NetworkV2 = get_ball_hyp_model(input_height=input_height, input_width=input_width)  # type: ignore
     model.eval()
 
     # Create dummy input
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     # Default input dimensions (can be changed)
     height, width = config.patch_height, config.patch_width
 
-    print(f"Visualizing NetworkV2 with input size ({height}, {width})")
+    print(f"Visualizing model with input size ({height}, {width})")
 
     # Show detailed architecture
     visualize_model(input_height=height, input_width=width)

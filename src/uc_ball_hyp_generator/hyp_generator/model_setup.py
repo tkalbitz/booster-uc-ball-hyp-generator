@@ -12,8 +12,8 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.tensorboard import SummaryWriter
 
-from uc_ball_hyp_generator.hyp_generator import model as model
 from uc_ball_hyp_generator.hyp_generator.config import patch_height, patch_width
+from uc_ball_hyp_generator.hyp_generator.model import get_ball_hyp_model
 from uc_ball_hyp_generator.hyp_generator.scale_patch import unscale_patch_x, unscale_patch_y
 from uc_ball_hyp_generator.utils.flops import get_flops
 from uc_ball_hyp_generator.utils.logger import get_logger
@@ -63,7 +63,7 @@ class DistanceLoss(nn.Module):
 def create_model(compile_model: bool = True) -> tuple[torch.nn.Module, str, str]:
     """Create and initialize the model."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = model.create_network_v2(patch_height, patch_width)
+    model = get_ball_hyp_model(patch_height, patch_width)
     model = model.to(device)
 
     # Apply PyTorch 2.0 compilation for better performance

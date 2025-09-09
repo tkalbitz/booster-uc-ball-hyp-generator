@@ -49,5 +49,5 @@ class NetworkV2(nn.Module):
         return x
 
 
-def create_network_v2(input_height: int, input_width: int) -> NetworkV2:
-    return NetworkV2(input_height, input_width)
+def get_ball_hyp_model(input_height: int, input_width: int) -> nn.Module:
+    return NetworkV2(input_height=input_height, input_width=input_width, num_classes=2)
