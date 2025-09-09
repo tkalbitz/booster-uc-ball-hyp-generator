@@ -8,6 +8,7 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 from uc_ball_hyp_generator.custom_metrics import FoundBallMetric
+from uc_ball_hyp_generator.early_stopping_on_lr import EarlyStoppingOnLR
 from uc_ball_hyp_generator.logger import get_logger
 
 _logger = get_logger(__name__)
@@ -155,34 +156,44 @@ def save_model_checkpoints(
     model: torch.nn.Module,
     model_dir: str,
     epoch: int,
+    patience_counter: int,
     val_loss: float,
     val_found_balls: float,
     best_val_loss: float,
     best_val_found_balls: float,
 ) -> tuple[float, float, int]:
     """Save model checkpoints and return updated best metrics and patience counter."""
-    patience_counter = 0
+
+    new_best_loss = False
+    new_best_balls = False
 
     if val_loss < best_val_loss:
-        best_val_loss = val_loss
         loss_filename = f"weights.loss.{epoch + 1:03d}-{val_loss:.6f}-{val_found_balls:.6f}.pth"
         torch.save(
             model.state_dict(),
             os.path.join(model_dir, loss_filename),
         )
-        patience_counter = 0
-        _logger.info("Save new best model (loss): %s", loss_filename)
-    else:
-        patience_counter += 1
+        delta = val_loss - best_val_loss
+        _logger.info(f"Save new best model (loss): {epoch + 1:03d} {val_loss:.6f} {delta:.6f}")
+        new_best_loss = True
+        best_val_loss = val_loss
 
     if val_found_balls > best_val_found_balls:
-        best_val_found_balls = val_found_balls
         most_balls_filename = f"weights.balls.{epoch + 1:03d}-{val_found_balls:.6f}-{val_loss:.6f}.pth"
         torch.save(
             model.state_dict(),
             os.path.join(model_dir, most_balls_filename),
         )
-        _logger.info("Save new best model (ball): %s", most_balls_filename)
+
+        delta = val_found_balls - best_val_found_balls
+        _logger.info(f"Save new best model (ball): {epoch + 1:03d} {val_found_balls:.6f} {delta:.6f}")
+        best_val_found_balls = val_found_balls
+        new_best_balls = True
+
+    if new_best_loss or new_best_balls:
+        patience_counter = 0
+    else:
+        patience_counter += 1
 
     return best_val_loss, best_val_found_balls, patience_counter
 
@@ -204,7 +215,7 @@ def run_training_loop(
     best_val_loss = float("inf")
     best_val_found_balls = 0.0
     patience_counter = 0
-    early_stopping_patience = 60
+    early_stopping_patience = 300
 
     min_loss = float("inf")
     max_accuracy = 0.0
@@ -212,6 +223,7 @@ def run_training_loop(
 
     train_metric = FoundBallMetric()
     val_metric = FoundBallMetric()
+    early_stopping_on_lr = EarlyStoppingOnLR()
 
     for epoch in range(epochs):
         train_start_time = time.time()
@@ -247,13 +259,17 @@ def run_training_loop(
         )
 
         best_val_loss, best_val_found_balls, patience_counter = save_model_checkpoints(
-            model, model_dir, epoch, val_loss, val_found_balls, best_val_loss, best_val_found_balls
+            model, model_dir, epoch, patience_counter, val_loss, val_found_balls, best_val_loss, best_val_found_balls
         )
 
         scheduler.step(val_loss)
 
+        if early_stopping_on_lr.check_lr(optimizer):
+            _logger.info("Early stopping triggered after %d epochs due to lr is 0", epoch + 1)
+            break
+
         if patience_counter >= early_stopping_patience:
-            _logger.info("Early stopping triggered after %d epochs", epoch + 1)
+            _logger.info("Early stopping triggered after %d epochs due to patience", epoch + 1)
             break
 
     writer.close()

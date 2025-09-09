@@ -107,9 +107,11 @@ def create_training_components(
     model: torch.nn.Module, model_dir: str, log_dir: str
 ) -> tuple[torch.optim.Optimizer, torch.nn.Module, torch.optim.lr_scheduler.ReduceLROnPlateau, SummaryWriter, TextIO]:
     """Create optimizer, loss function, and logging components."""
-    optimizer = optim.AdamW(model.parameters(), lr=0.001, amsgrad=True)
+    optimizer = optim.AdamW(model.parameters(), lr=0.001, amsgrad=False)
     criterion = DistanceLoss()
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode="min", factor=0.2, patience=15, min_lr=1e-7)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode="min", factor=0.2, patience=40, threshold=1e-7, threshold_mode="abs"
+    )
 
     writer = SummaryWriter(log_dir)
 
