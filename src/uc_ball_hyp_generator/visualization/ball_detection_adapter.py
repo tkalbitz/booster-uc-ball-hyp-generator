@@ -10,14 +10,14 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-import numpy as np
+import kornia
 import torch
+import torchvision.transforms.v2 as transforms_v2  # type: ignore[import-untyped]
 from naoteamhtwk_machinelearning_visualizer.core.shapes import Annotation, EllipseShape, Point, VisualizationResult
-from PIL import Image
+from torchvision.io import ImageReadMode, decode_image  # type: ignore[import-untyped]
 
 import uc_ball_hyp_generator.models as models
 from uc_ball_hyp_generator.config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
-from uc_ball_hyp_generator.dataset_handling import rgb2yuv_optimized
 from uc_ball_hyp_generator.scale import unscale_x, unscale_y
 
 _logger = logging.getLogger(__name__)
@@ -94,21 +94,25 @@ def _load_model() -> tuple[torch.nn.Module, torch.device]:
 
 def _preprocess_image(image_path: str) -> PreprocessedImage:
     """Load and preprocess image for model inference, splitting into patches."""
-    # Load and resize image as done in training
-    pil_image = Image.open(image_path).convert("RGB")
-    original_size = pil_image.size  # (width, height)
+    # Load image using torchvision.io.decode_image as in dataset_handling.py
+    image_tensor = decode_image(image_path, mode=ImageReadMode.RGB)
 
-    # Resize to scaled dimensions (160x120 with default config)
-    pil_image_scaled = pil_image.resize((img_scaled_width, img_scaled_height), Image.Resampling.LANCZOS)
+    # Get original size before scaling
+    original_height, original_width = image_tensor.shape[1], image_tensor.shape[2]
+    original_size = (original_width, original_height)  # (width, height)
 
-    # Convert to numpy array
-    image_array = np.array(pil_image_scaled, dtype=np.float32)
+    # Convert from uint8 [0, 255] to float32 [0, 1] and resize as in dataset_handling.py
+    transform = transforms_v2.Compose(
+        [
+            transforms_v2.ToDtype(torch.float32, scale=True),
+            transforms_v2.Resize((img_scaled_height, img_scaled_width), antialias=True),
+        ]
+    )
 
-    # Convert to tensor (H, W, C format for color conversion)
-    image_tensor = torch.from_numpy(image_array)
+    processed_image = transform(image_tensor)  # (C, H, W)
 
-    # Convert RGB to YUV as in training
-    yuv_tensor = rgb2yuv_optimized(image_tensor)  # Still (H, W, C)
+    # Convert RGB to YUV using Kornia as in dataset_handling.py
+    yuv_tensor = kornia.color.rgb_to_yuv(processed_image.unsqueeze(0)).squeeze(0)  # (C, H, W)
 
     # Split image into patches
     patches_y = img_scaled_height // patch_height
@@ -124,12 +128,9 @@ def _preprocess_image(image_path: str) -> PreprocessedImage:
             start_x = px * patch_width
             end_x = start_x + patch_width
 
-            # Extract patch
-            patch = yuv_tensor[start_y:end_y, start_x:end_x, :]  # (H, W, C)
-
-            # Convert to CHW format and normalize as in training
-            patch_chw = patch.permute(2, 0, 1) / 255.0  # (C, H, W)
-            patches.append(patch_chw)
+            # Extract patch from CHW tensor
+            patch = yuv_tensor[:, start_y:end_y, start_x:end_x]  # (C, H, W)
+            patches.append(patch)
 
             # Store patch position for coordinate conversion
             patch_positions.append((start_x, start_y))
