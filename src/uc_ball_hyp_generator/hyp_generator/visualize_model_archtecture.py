@@ -5,8 +5,8 @@
 import torch
 from torchinfo import summary
 
-from uc_ball_hyp_generator import config
-from uc_ball_hyp_generator.models import NetworkV2
+from uc_ball_hyp_generator.hyp_generator import config
+from uc_ball_hyp_generator.hyp_generator.model import NetworkV2
 
 
 def visualize_model(input_height: int = 480, input_width: int = 640, batch_size: int = 1) -> None:

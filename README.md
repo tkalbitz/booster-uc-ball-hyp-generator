@@ -2,8 +2,29 @@
 
 A PyTorch-based neural network for ball detection and position estimation in robotic soccer. This model generates ball position hypotheses from image patches and is optimized for deployment on NAO robots.
 
+## Quick Start
+
+The project has been restructured into a proper Python package. Here are the updated commands:
+
+```bash
+# Install dependencies
+uv sync
+
+# Run training
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/main.py
+
+# Run tests
+PYTHONPATH=src uv run pytest tests/ -v
+
+# Launch visualizer
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/visualization/launch_ball_visualizer.py /path/to/images /path/to/model.pth
+```
+
+**Important**: All Python commands now require `PYTHONPATH=src` and use the full package path.
+
 ## Table of Contents
 
+- [Quick Start](#quick-start)
 - [Overview](#overview)
 - [Installation](#installation)
 - [Dataset Structure](#dataset-structure)
@@ -97,7 +118,7 @@ Where:
 
 ## Configuration
 
-Edit `src/config.py` to match your dataset:
+Edit `src/uc_ball_hyp_generator/hyp_generator/config.py` to match your dataset:
 
 ```python
 # Image processing parameters
@@ -118,13 +139,13 @@ trainingset_csv_collection = Path("/path/to/uc-ball-70.txt")
 Start training with default parameters:
 
 ```bash
-cd src
-uv run python main.py
+# From project root
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/main.py
 ```
 
 ### Training Parameters
 
-Key training settings in `main.py`:
+Key training settings in `src/uc_ball_hyp_generator/hyp_generator/main.py`:
 
 ```python
 batch_size_train = 64
@@ -166,23 +187,28 @@ model/
 
 ### Basic Testing
 
-Test model on patches:
+The project uses pytest for comprehensive testing:
+
 ```bash
-cd src
-uv run python benchmark_model_by_patches.py
+# Run all tests
+PYTHONPATH=src uv run pytest tests/ -v
+
+# Run specific test modules
+PYTHONPATH=src uv run pytest tests/uc_ball_hyp_generator_tests/test_model_setup.py -v
+PYTHONPATH=src uv run pytest tests/uc_ball_hyp_generator_tests/test_dataset_handling.py -v
+PYTHONPATH=src uv run pytest tests/uc_ball_hyp_generator_tests/test_color_conversion.py -v
 ```
 
-Test model on full images:
+### Model Evaluation
+
+For model evaluation and benchmarking, you can use the training and testing functions directly:
+
 ```bash
-cd src
-uv run python benchmark_model_by_images.py
-```
+# Run model training which includes evaluation
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/main.py
 
-### Custom Evaluation
-
-Edit the model file path in the benchmark scripts:
-```python
-model_file = "/path/to/your/weights.acc.xxx-x.xxxxxx.pth"
+# Test specific model components
+PYTHONPATH=src uv run pytest tests/uc_ball_hyp_generator_tests/test_model_setup.py::test_create_training_components -v
 ```
 
 ### Evaluation Metrics
@@ -196,8 +222,8 @@ model_file = "/path/to/your/weights.acc.xxx-x.xxxxxx.pth"
 ### PyTorch to ONNX Export
 
 ```bash
-cd src
-uv run python deploy.py [model_path]
+# From project root
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/deploy.py [model_path]
 ```
 
 This creates:
@@ -219,76 +245,31 @@ Models are deployed to:
 
 TensorRT provides significant speed improvements for deployment.
 
-### FP16 Optimization (2x speed boost)
+### TensorRT Optimization (If Available)
+
+TensorRT optimization scripts would need to be implemented for the current project structure:
 
 ```bash
-cd src
-
-# Direct PyTorch to TensorRT
-uv run python export_tensorrt.py model.pth output_fp16.pth --fp16
-
-# Via ONNX (more compatible)
-uv run python deploy.py  # Create ONNX first
-uv run python export_tensorrt.py model.onnx output_fp16.engine --from-onnx --fp16
+# Example implementation paths (not yet available)
+# PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/export_tensorrt.py model.pth output_fp16.pth --fp16
+# PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/inference_tensorrt.py model_fp16.pth --benchmark 1000
 ```
 
-### INT8 Quantization (4-8x speed boost)
+Note: TensorRT optimization scripts are not currently implemented in the new project structure.
+
+### Example Workflow
 
 ```bash
-# With automatic calibration
-uv run python export_tensorrt.py model.pth output_int8.pth --int8 --calibration-batches 100
-
-# Via ONNX with custom calibration
-uv run python export_tensorrt.py model.onnx output_int8.engine --from-onnx --int8 --calibration-batches 200
-```
-
-### TensorRT Inference
-
-```bash
-# Benchmark performance
-uv run python inference_tensorrt.py model_fp16.pth --benchmark 1000
-
-# Single image inference
-uv run python inference_tensorrt.py model_int8.pth --image path/to/image.png
-```
-
-### Precision Comparison
-
-Compare accuracy across different precisions:
-
-```bash
-uv run python compare_precision_accuracy.py original.pth fp16_model.pth int8_model.pth
-```
-
-### Performance Expectations
-
-| Precision | Speed Boost | Accuracy Retention | Use Case |
-|-----------|-------------|-------------------|-----------|
-| FP32      | 1x (baseline) | 100% | Development/Testing |
-| FP16      | ~2x         | ~99.5% | Production (balanced) |
-| INT8      | ~4-8x       | ~98-99% | High-speed deployment |
-
-### Example TensorRT Workflow
-
-```bash
-# Complete optimization pipeline
-cd src
+# Complete training and deployment pipeline
 
 # 1. Train your model
-uv run python main.py
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/main.py
 
-# 2. Export to ONNX
-uv run python deploy.py path/to/best_model.pth
+# 2. Run tests to validate
+PYTHONPATH=src uv run pytest tests/ -v
 
-# 3. Create optimized versions
-uv run python export_tensorrt.py model.onnx model_fp16.engine --from-onnx --fp16
-uv run python export_tensorrt.py model.onnx model_int8.engine --from-onnx --int8
-
-# 4. Compare performance
-uv run python compare_precision_accuracy.py model.pth model_fp16.engine model_int8.engine
-
-# 5. Benchmark speed
-uv run python inference_tensorrt.py model_int8.engine --benchmark 1000
+# 3. Export to ONNX (if deploy.py is available)
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/deploy.py path/to/best_model.pth
 ```
 
 ## Visualization
@@ -301,12 +282,12 @@ The visualizer package automatically creates a full-featured GUI with image load
 
 ```bash
 # Launch the visualizer with your images and trained model
-PYTHONPATH=src uv run python src/uc_ball_hyp_generator/visualization/launch_ball_visualizer.py /path/to/images /path/to/model.pth
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/visualization/launch_ball_visualizer.py /path/to/images /path/to/model.pth
 ```
 
 Example:
 ```bash
-PYTHONPATH=src uv run python src/uc_ball_hyp_generator/visualization/launch_ball_visualizer.py ~/BallImages model/yuv_2025-09-03-22-29-11/weights.acc.299-0.982143.pth
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/visualization/launch_ball_visualizer.py ~/BallImages model/yuv_2025-09-03-22-29-11/weights.acc.299-0.982143.pth
 ```
 
 **The visualizer package will automatically:**
@@ -323,16 +304,16 @@ You can also run the visualizer module directly:
 
 ```bash
 # Set model path and launch directly
-BALL_MODEL_PATH=/path/to/model.pth PYTHONPATH=src uv run python -m naoteamhtwk_machinelearning_visualizer --input /path/to/images --adapter uc_ball_hyp_generator.visualization.ball_detection_adapter
+BALL_MODEL_PATH=/path/to/model.pth PYTHONPATH=src uv run python -m naoteamhtwk_machinelearning_visualizer --input /path/to/images --adapter uc_ball_hyp_generator.hyp_generator.visualization.ball_detection_adapter
 ```
 
 ### Legacy Visualization (matplotlib)
 
-For development/debugging, you can still use the old matplotlib-based visualizer:
+For development/debugging, you can use visualization features:
 
 ```bash
-cd src
-uv run python visualize_model.py
+# Architecture visualization
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/visualize_model_archtecture.py
 ```
 
 ### Visualization Features
@@ -355,24 +336,45 @@ uv run python visualize_model.py
 
 ```
 src/
-├── main.py                          # Training script
-├── models.py                        # Neural network architecture
-├── dataset_handling.py              # Data loading and augmentation
-├── config.py                        # Configuration parameters
-├── csv_label_reader.py              # Label file parsing
-├── custom_metrics.py                # Evaluation metrics
-├── scale.py                         # Coordinate scaling utilities
-├── utils.py                         # FLOPS calculation and utilities
-│
-├── benchmark_model_by_patches.py    # Patch-level evaluation
-├── benchmark_model_by_images.py     # Image-level evaluation
-├── visualize_model.py               # Interactive visualization
-│
-├── deploy.py                        # ONNX export
-├── export_tensorrt.py               # TensorRT optimization
-├── inference_tensorrt.py            # TensorRT inference
-├── compare_precision_accuracy.py    # Precision comparison
-└── tensorrt_example.py              # Complete TensorRT workflow
+└── uc_ball_hyp_generator/
+    ├── __init__.py
+    ├── layer/                           # Custom neural network layers
+    │   ├── __init__.py
+    │   ├── big_little_reduction.py     # Reduction layer implementation
+    │   ├── conv2dbn.py                  # Convolution + BatchNorm layer
+    │   └── seblock.py                   # Squeeze-and-Excitation blocks
+    ├── utils/                           # Utility modules
+    │   ├── __init__.py
+    │   ├── csv_label_reader.py          # Dataset label parsing
+    │   ├── early_stopping_on_lr.py     # Training utilities
+    │   ├── flops.py                     # Model complexity calculation
+    │   ├── logger.py                    # Logging configuration
+    │   └── scale.py                     # Coordinate scaling utilities
+    └── hyp_generator/                   # Main ball detection module
+        ├── __init__.py
+        ├── config.py                    # Configuration parameters
+        ├── dataset_handling.py          # Data loading and augmentation
+        ├── deploy.py                    # Model export (ONNX)
+        ├── main.py                      # Training script
+        ├── model.py                     # Neural network architecture
+        ├── model_setup.py               # Model initialization
+        ├── patch_found_ball_metric.py   # Custom metrics
+        ├── scale_patch.py               # Patch coordinate scaling
+        ├── training.py                  # Training loop implementation
+        ├── visualize_model_archtecture.py  # Model architecture visualization
+        └── visualization/               # Visualization tools
+            ├── __init__.py
+            ├── ball_detection_adapter.py    # Visualizer adapter
+            └── launch_ball_visualizer.py    # GUI visualizer launcher
+
+tests/
+└── uc_ball_hyp_generator_tests/         # Comprehensive test suite
+    ├── test_color_conversion.py         # Color space conversion tests
+    ├── test_csv_label_reader.py         # Label parsing tests
+    ├── test_custom_metrics.py           # Metrics validation tests
+    ├── test_dataset_handling.py         # Data pipeline tests
+    ├── test_gpu_augmentation.py         # GPU augmentation tests
+    └── test_model_setup.py              # Model initialization tests
 ```
 
 ## Performance Benchmarks
@@ -423,9 +425,8 @@ uv run python benchmark_model_by_patches.py  # Automatically uses CPU
 
 **4. Import Errors**
 ```bash
-# Ensure you're in the src directory
-cd src
-uv run python main.py
+# Use PYTHONPATH to ensure proper imports
+PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/main.py
 ```
 
 **5. Low Training Accuracy**

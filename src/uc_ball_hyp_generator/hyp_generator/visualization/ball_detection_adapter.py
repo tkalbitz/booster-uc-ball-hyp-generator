@@ -16,9 +16,15 @@ import torchvision.transforms.v2 as transforms_v2  # type: ignore[import-untyped
 from naoteamhtwk_machinelearning_visualizer.core.shapes import Annotation, EllipseShape, Point, VisualizationResult
 from torchvision.io import ImageReadMode, decode_image  # type: ignore[import-untyped]
 
-import uc_ball_hyp_generator.models as models
-from uc_ball_hyp_generator.config import img_scaled_height, img_scaled_width, patch_height, patch_width, scale_factor_f
-from uc_ball_hyp_generator.utils.scale_patch import unscale_patch_x, unscale_patch_y
+import uc_ball_hyp_generator.hyp_generator.model as model
+from uc_ball_hyp_generator.hyp_generator.config import (
+    img_scaled_height,
+    img_scaled_width,
+    patch_height,
+    patch_width,
+    scale_factor_f,
+)
+from uc_ball_hyp_generator.hyp_generator.scale_patch import unscale_patch_x, unscale_patch_y
 
 _logger = logging.getLogger(__name__)
 
@@ -64,7 +70,7 @@ def _load_model() -> tuple[torch.nn.Module, torch.device]:
         if torch.cuda.is_available():
             _device = torch.device("cuda")
 
-        _model = models.create_network_v2(patch_height, patch_width)
+        _model = model.create_network_v2(patch_height, patch_width)
 
         # Load state dict and handle torch.compile prefixes
         state_dict = torch.load(current_model_path, map_location=_device)

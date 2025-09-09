@@ -1,10 +1,10 @@
 import torch
 
-from uc_ball_hyp_generator.config import patch_height, patch_width
-from uc_ball_hyp_generator.utils.scale_patch import unscale_patch_x, unscale_patch_y
+from uc_ball_hyp_generator.hyp_generator.config import patch_height, patch_width
+from uc_ball_hyp_generator.hyp_generator.scale_patch import unscale_patch_x, unscale_patch_y
 
 
-class FoundBallMetric:
+class PatchFoundBallMetric:
     def __init__(self, name: str = "found_balls") -> None:
         self.name = name
         self.reset_states()

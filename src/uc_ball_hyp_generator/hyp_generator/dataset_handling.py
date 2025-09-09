@@ -11,7 +11,7 @@ from torch import Tensor
 from torch.utils.data import DataLoader, Dataset
 from torchvision.io import ImageReadMode, decode_image  # type: ignore[import-untyped]
 
-from uc_ball_hyp_generator.config import (
+from uc_ball_hyp_generator.hyp_generator.config import (
     img_scaled_height,
     img_scaled_width,
     patch_height,
@@ -20,7 +20,7 @@ from uc_ball_hyp_generator.config import (
     path_count_w,
     scale_factor,
 )
-from uc_ball_hyp_generator.utils.scale_patch import scale_patch_x, scale_patch_y
+from uc_ball_hyp_generator.hyp_generator.scale_patch import scale_patch_x, scale_patch_y
 
 # Cache directory for preprocessed tensors
 _cache_dir = Path.home() / ".cache" / "uc_ball_hyp_generator" / "tensors"

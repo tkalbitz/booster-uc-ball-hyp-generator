@@ -7,7 +7,7 @@ from typing import TextIO
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-from uc_ball_hyp_generator.custom_metrics import FoundBallMetric
+from uc_ball_hyp_generator.hyp_generator.patch_found_ball_metric import PatchFoundBallMetric
 from uc_ball_hyp_generator.utils.early_stopping_on_lr import EarlyStoppingOnLR
 from uc_ball_hyp_generator.utils.logger import get_logger
 
@@ -31,7 +31,7 @@ def train_epoch(
     train_loader: torch.utils.data.DataLoader,
     optimizer: torch.optim.Optimizer,
     criterion: torch.nn.Module,
-    train_metric: FoundBallMetric,
+    train_metric: PatchFoundBallMetric,
     device: torch.device,
 ) -> tuple[float, float, float]:
     """Run a single training epoch and return metrics."""
@@ -67,7 +67,7 @@ def validate_epoch(
     model: torch.nn.Module,
     test_loader: torch.utils.data.DataLoader,
     criterion: torch.nn.Module,
-    val_metric: FoundBallMetric,
+    val_metric: PatchFoundBallMetric,
     device: torch.device,
 ) -> tuple[float, float, float]:
     """Run a single validation epoch and return metrics."""
@@ -221,8 +221,8 @@ def run_training_loop(
     max_accuracy = 0.0
     max_found_balls = 0.0
 
-    train_metric = FoundBallMetric()
-    val_metric = FoundBallMetric()
+    train_metric = PatchFoundBallMetric()
+    val_metric = PatchFoundBallMetric()
     early_stopping_on_lr = EarlyStoppingOnLR()
 
     for epoch in range(epochs):

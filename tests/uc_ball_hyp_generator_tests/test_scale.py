@@ -2,8 +2,7 @@
 
 import torch
 
-from uc_ball_hyp_generator.utils.scale import scale
-from uc_ball_hyp_generator.utils.scale_patch import (
+from uc_ball_hyp_generator.hyp_generator.scale_patch import (
     _patch_output_height,
     _patch_output_width,
     scale_patch_x,
@@ -11,6 +10,7 @@ from uc_ball_hyp_generator.utils.scale_patch import (
     unscale_patch_x,
     unscale_patch_y,
 )
+from uc_ball_hyp_generator.utils.scale import scale
 
 
 def test_scale_basic_functionality() -> None:
@@ -199,7 +199,7 @@ def test_scale_unscale_symmetry_with_tensors() -> None:
 
 def test_output_dimensions_consistency() -> None:
     """Test that output_width and output_height are calculated correctly."""
-    from uc_ball_hyp_generator.config import patch_height, patch_width
+    from uc_ball_hyp_generator.hyp_generator.config import patch_height, patch_width
 
     expected_width = (patch_width / 2) * 1.2
     expected_height = (patch_height / 2) * 1.2
