@@ -1,3 +1,5 @@
+from typing import TypeVar
+
 import torch
 
 # Our output is from [-1,1]. So we use input_width/2 to cover the whole image.
@@ -5,21 +7,23 @@ import torch
 from uc_ball_hyp_generator.hyp_generator.config import patch_height, patch_width
 from uc_ball_hyp_generator.utils.scale import scale
 
-_patch_output_width: float = (patch_width / 2) * 1.2
-_patch_output_height: float = (patch_height / 2) * 1.2
+_patch_output_width: float = (patch_width / 2) * 1.05
+_patch_output_height: float = (patch_height / 2) * 1.05
+
+T = TypeVar("T", float, torch.Tensor)
 
 
-def scale_patch_x(x: float | torch.Tensor) -> float | torch.Tensor:
+def scale_patch_x(x: T) -> T:
     return scale(x, -_patch_output_width, _patch_output_width, -1, 1)
 
 
-def unscale_patch_x(x: float | torch.Tensor) -> float | torch.Tensor:
+def unscale_patch_x(x: T) -> T:
     return scale(x, -1, 1, -_patch_output_width, _patch_output_width)
 
 
-def scale_patch_y(x: float | torch.Tensor) -> float | torch.Tensor:
+def scale_patch_y(x: T) -> T:
     return scale(x, -_patch_output_height, _patch_output_height, -1, 1)
 
 
-def unscale_patch_y(x: float | torch.Tensor) -> float | torch.Tensor:
+def unscale_patch_y(x: T) -> T:
     return scale(x, -1, 1, -_patch_output_height, _patch_output_height)

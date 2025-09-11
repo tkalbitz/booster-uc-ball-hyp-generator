@@ -1,11 +1,13 @@
 """Linear scaling utilities for numerical values and tensors."""
 
+from typing import TypeVar
+
 import torch
 
+T = TypeVar("T", float, torch.Tensor)
 
-def scale(
-    x: float | torch.Tensor, from_min: float, from_max: float, to_min: float, to_max: float
-) -> float | torch.Tensor:
+
+def scale(x: T, from_min: float, from_max: float, to_min: float, to_max: float) -> T:
     """Scale a value from one range to another using linear interpolation.
 
     Transforms values from the range [from_min, from_max] to [to_min, to_max].
