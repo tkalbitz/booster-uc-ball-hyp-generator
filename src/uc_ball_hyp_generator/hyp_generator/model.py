@@ -34,7 +34,6 @@ class NetworkV2(nn.Module):
             nn.BatchNorm1d(32),
             nn.ReLU(),
             nn.Linear(32, num_classes),
-            nn.Tanh(),
         )
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:

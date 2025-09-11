@@ -15,7 +15,7 @@
             "name": "Python Debugger: main.py",
             "type": "debugpy",
             "request": "launch",
-            "program": "src/uc_ball_hyp_generator/main.py",
+            "program": "src/uc_ball_hyp_generator/hyp_generator/main.py",
             "console": "integratedTerminal"
         },
     ]

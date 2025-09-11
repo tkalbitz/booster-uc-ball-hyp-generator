@@ -1,6 +1,7 @@
 """Point-Based Image Patch Dataset for PyTorch with GPU acceleration."""
 
 import multiprocessing
+from math import atanh
 from pathlib import Path
 
 import blake3
@@ -21,6 +22,7 @@ from uc_ball_hyp_generator.hyp_generator.config import (
     scale_factor,
 )
 from uc_ball_hyp_generator.hyp_generator.scale_patch import scale_patch_x, scale_patch_y
+from uc_ball_hyp_generator.utils.clamp import clamp
 
 # Cache directory for preprocessed tensors
 _cache_dir = Path.home() / ".cache" / "uc_ball_hyp_generator" / "tensors"
@@ -64,12 +66,17 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         self.device = device or torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         self._brightness_jitter = transforms_v2.ColorJitter(brightness=0.15)
+        self._coord_min = -1 + torch.finfo(torch.float32).eps
+        self._coord_max = 1 - torch.finfo(torch.float32).eps
 
         # For test mode: precompute and cache all patches
         if not training:
             self._test_patches: list[Tensor] = []
             self._test_points: list[Tensor] = []
             self._precompute_test_data()
+
+    def _clamp_coord(self, xy: float) -> float:
+        return clamp(xy, self._coord_min, self._coord_max)
 
     def _precompute_test_data(self) -> None:
         """Precompute all test patches and points for GPU caching."""
@@ -114,8 +121,12 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         y_relative_to_center = abs_y_in_patch - patch_height / 2
 
         # Apply scaling functions
-        point_x_scaled = scale_patch_x(x_relative_to_center)
-        point_y_scaled = scale_patch_y(y_relative_to_center)
+        # atanh(x) is undefined for x <= -1
+        point_x_scaled: float = self._clamp_coord(scale_patch_x(x_relative_to_center))
+        point_y_scaled: float = self._clamp_coord(scale_patch_y(y_relative_to_center))
+
+        point_x_scaled = atanh(point_x_scaled)
+        point_y_scaled = atanh(point_y_scaled)
 
         point = torch.tensor([point_x_scaled, point_y_scaled, diameter], dtype=torch.float32)
 
@@ -274,8 +285,12 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         y_relative_to_center = abs_y_in_patch - patch_height / 2
 
         # Apply scaling functions
-        point_x_scaled = scale_patch_x(x_relative_to_center)
-        point_y_scaled = scale_patch_y(y_relative_to_center)
+        # atanh(x) is undefined for x <= -1
+        point_x_scaled = self._clamp_coord(scale_patch_x(x_relative_to_center))
+        point_y_scaled = self._clamp_coord(scale_patch_y(y_relative_to_center))
+
+        point_x_scaled = atanh(point_x_scaled)
+        point_y_scaled = atanh(point_y_scaled)
 
         # Convert RGB to YUV using Kornia
         patch_yuv = kornia.color.rgb_to_yuv(patch.unsqueeze(0)).squeeze(0)

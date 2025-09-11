@@ -8,8 +8,8 @@ from pathlib import Path
 from typing import TextIO
 
 import torch
-import torch.nn as nn
 import torch.optim as optim
+from torch.nn import HuberLoss
 from torch.utils.tensorboard import SummaryWriter
 
 from uc_ball_hyp_generator.hyp_generator.config import patch_height, patch_width
@@ -21,7 +21,23 @@ from uc_ball_hyp_generator.utils.logger import get_logger
 _logger = get_logger(__name__)
 
 
-class DistanceLoss(nn.Module):
+class BallSmoothL1Loss(HuberLoss):
+    def __init__(self, reduction: str = "mean", delta: float = 1.0) -> None:
+        super().__init__(reduction=reduction, delta=delta)
+
+    def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
+        y_t_x = unscale_patch_x(torch.tanh(y_true[:, 0]))
+        y_t_y = unscale_patch_y(torch.tanh(y_true[:, 1]))
+        y_p_x = unscale_patch_x(torch.tanh(y_pred[:, 0]))
+        y_p_y = unscale_patch_y(torch.tanh(y_pred[:, 1]))
+
+        y_t_xy = torch.stack([y_t_x, y_t_y], dim=1)
+        y_p_xy = torch.stack([y_p_x, y_p_y], dim=1)
+
+        return super().forward(y_p_xy, y_t_xy)
+
+
+class DistanceLoss(HuberLoss):
     """Custom distance loss for ball detection."""
 
     def __init__(self) -> None:
@@ -35,21 +51,12 @@ class DistanceLoss(nn.Module):
         return x + torch.nn.functional.softplus(-2.0 * x) - torch.as_tensor(self.log_two)
 
     def forward(self, y_pred: torch.Tensor, y_true: torch.Tensor) -> torch.Tensor:
+        # y_true 0 = x, 1 = y, 2 diametre
         # Vectorized unscaling operations - ensure tensor output
-        y_t_x = unscale_patch_x(y_true[:, 0])
-        y_t_y = unscale_patch_y(y_true[:, 1])
-        y_p_x = unscale_patch_x(y_pred[:, 0])
-        y_p_y = unscale_patch_y(y_pred[:, 1])
-
-        # Convert to tensors if they aren't already
-        if not isinstance(y_t_x, torch.Tensor):
-            y_t_x = torch.tensor(y_t_x, device=y_true.device, dtype=y_true.dtype)
-        if not isinstance(y_t_y, torch.Tensor):
-            y_t_y = torch.tensor(y_t_y, device=y_true.device, dtype=y_true.dtype)
-        if not isinstance(y_p_x, torch.Tensor):
-            y_p_x = torch.tensor(y_p_x, device=y_pred.device, dtype=y_pred.dtype)
-        if not isinstance(y_p_y, torch.Tensor):
-            y_p_y = torch.tensor(y_p_y, device=y_pred.device, dtype=y_pred.dtype)
+        y_t_x = unscale_patch_x(torch.tanh(y_true[:, 0]))
+        y_t_y = unscale_patch_y(torch.tanh(y_true[:, 1]))
+        y_p_x = unscale_patch_x(torch.tanh(y_pred[:, 0]))
+        y_p_y = unscale_patch_y(torch.tanh(y_pred[:, 1]))
 
         y_t_xy = torch.stack([y_t_x, y_t_y], dim=1)
         y_p_xy = torch.stack([y_p_x, y_p_y], dim=1)
