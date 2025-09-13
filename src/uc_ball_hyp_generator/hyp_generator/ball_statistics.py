@@ -6,7 +6,7 @@ from uc_ball_hyp_generator.hyp_generator.config import image_dir, testset_csv_co
 from uc_ball_hyp_generator.utils.csv_label_reader import load_csv_collection
 
 
-def _print_histogram(data: List[float], title: str, unit: str = "pixels") -> None:
+def _print_histogram(data: List[int], title: str, unit: str = "pixels") -> None:
     """Helper function to print a histogram for given data."""
     if not data:
         return
