@@ -1,14 +1,16 @@
 """Ball classifier dataset for generating positive and negative cpatch samples."""
 
 import random
+from pathlib import Path
 
+import blake3
 import kornia
 import torch
 import torchvision.transforms.v2 as transforms_v2  # type: ignore[import-untyped]
 from torch import Tensor
 from torch.nn import Module
 from torch.utils.data import Dataset
-from torchvision.io import ImageReadMode, decode_image  # type: ignore[import-untyped]
+from torchvision.io import ImageReadMode, decode_image, write_jpeg  # type: ignore[import-untyped]
 
 from uc_ball_hyp_generator.classifier.config import CPATCH_SIZE
 from uc_ball_hyp_generator.hyp_generator.ball_hypothesis_image_scaler import BallHypothesisImageScaler
@@ -41,6 +43,8 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
         self.hyp_model.eval()
         self.hyp_model_device = next(self.hyp_model.parameters()).device
         self.hyp_image_scaler = BallHypothesisImageScaler()
+        self.jpg_cache_dir = Path.home() / ".cache" / "uc_ball_hyp_generator" / "jpgs"
+        self.jpg_cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Data augmentation transforms
         self._brightness_jitter = transforms_v2.ColorJitter(brightness=0.15)
@@ -133,12 +137,32 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
 
         return cpatch, torch.tensor([0.0])
 
+    def _get_jpg_cache_path(self, image_path: str) -> Path:
+        """Get cache path for JPEG version of image using blake3 hash."""
+        abs_path = str(Path(image_path).resolve())
+        hash_obj = blake3.blake3(abs_path.encode())
+        hash_hex = hash_obj.hexdigest()
+        subdir = self.jpg_cache_dir / hash_hex[:2]
+        return subdir / f"{hash_hex}.jpg"
+
     def _load_and_scale_image(self, image_path: str) -> tuple[Tensor, Tensor]:
         """Load image and return both original and scaled versions."""
-        # Load original image
-        original_image = decode_image(image_path, mode=ImageReadMode.RGB)
-        original_image = transforms_v2.ToDtype(torch.float32, scale=True)(original_image)
+        # Check if we should use cached JPEG for PNG files
+        if image_path.lower().endswith(".png"):
+            jpg_path = self._get_jpg_cache_path(image_path)
+            if jpg_path.exists():
+                # Load from JPEG cache
+                original_image = decode_image(str(jpg_path), mode=ImageReadMode.RGB)
+            else:
+                # Load PNG, convert to JPEG and cache
+                original_image = decode_image(image_path, mode=ImageReadMode.RGB)
+                jpg_path.parent.mkdir(parents=True, exist_ok=True)
+                write_jpeg(original_image, str(jpg_path), quality=95)
+        else:
+            # Load original image directly
+            original_image = decode_image(image_path, mode=ImageReadMode.RGB)
 
+        original_image = transforms_v2.ToDtype(torch.float32, scale=True)(original_image)
         scaled_image = self.hyp_image_scaler.load_and_scale(image_path)
 
         return original_image, scaled_image

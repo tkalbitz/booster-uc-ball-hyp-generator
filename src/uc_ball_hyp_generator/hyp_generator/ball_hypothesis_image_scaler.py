@@ -19,7 +19,7 @@ class BallHypothesisImageScaler:
 
     def __init__(self) -> None:
         """Initialize the image scaler with cache directory."""
-        self._cache_dir = Path.home() / ".cache" / "uc_ball_hyp_generator" / "tensors"
+        self._cache_dir = Path.home() / ".cache" / "uc_ball_hyp_generator" / "scaled_ball_hypothesis_images"
 
     def _get_cache_key(self, image_path: str) -> str:
         """Generate cache key from image path and scaling parameters."""
@@ -28,8 +28,8 @@ class BallHypothesisImageScaler:
 
     def _get_cache_path(self, cache_key: str) -> Path:
         """Get cache file path for given cache key."""
-        self._cache_dir.mkdir(parents=True, exist_ok=True)
-        return self._cache_dir / f"{cache_key}.pt"
+        subdir = self._cache_dir / cache_key[:2]
+        return subdir / f"{cache_key}.pt"
 
     def load_and_scale(self, image_path: str) -> Tensor:
         """Load image and scale it to hypothesis generator dimensions with caching.
@@ -46,7 +46,7 @@ class BallHypothesisImageScaler:
         # Try to load from cache
         if cache_path.exists():
             try:
-                cached_data = torch.load(cache_path, weights_only=True)
+                cached_data = torch.load(cache_path, weights_only=False)
                 return cached_data["scaled_image"]
             except (OSError, KeyError):
                 pass
@@ -66,6 +66,7 @@ class BallHypothesisImageScaler:
 
         # Save to cache
         try:
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
             torch.save({"scaled_image": scaled_image}, cache_path)
         except OSError:
             pass
