@@ -1,7 +1,9 @@
 """Shared utility functions for hypothesis generator and classifier."""
 
+from pathlib import Path
+
 import torch
-from torch import Tensor
+from torch import Tensor, device
 
 from uc_ball_hyp_generator.hyp_generator.config import (
     img_scaled_height,
@@ -10,7 +12,11 @@ from uc_ball_hyp_generator.hyp_generator.config import (
     patch_width,
     scale_factor,
 )
+from uc_ball_hyp_generator.hyp_generator.model import get_ball_hyp_model
 from uc_ball_hyp_generator.hyp_generator.scale_patch import unscale_patch_x, unscale_patch_y, unscale_radius
+from uc_ball_hyp_generator.utils.logger import get_logger
+
+_logger = get_logger(__name__)
 
 
 def create_hpatch(
@@ -101,3 +107,37 @@ def transform_hyp_output_to_original_coords(
     original_diameter = radius * 2 * scale_factor
 
     return original_center_x, original_center_y, original_diameter
+
+
+def load_ball_hyp_model(model_weights_path: Path, device: device):
+    """Load the ball hypothesis model."""
+
+    current_model_path = model_weights_path
+
+    _logger.info("Loading ball hypothesis model from: %s", current_model_path)
+
+    model = get_ball_hyp_model(patch_height, patch_width)
+
+    # Load state dict and handle torch.compile prefixes
+    state_dict = torch.load(current_model_path, map_location=device)
+
+    # Check if this is a compiled model (has _orig_mod. prefixes)
+    if any(key.startswith("_orig_mod.") for key in state_dict.keys()):
+        _logger.info("Detected compiled model, removing _orig_mod. prefixes")
+        # Remove _orig_mod. prefixes from compiled model
+        cleaned_state_dict = {}
+        for key, value in state_dict.items():
+            if key.startswith("_orig_mod."):
+                cleaned_key = key[len("_orig_mod.") :]
+                cleaned_state_dict[cleaned_key] = value
+            else:
+                cleaned_state_dict[key] = value
+        state_dict = cleaned_state_dict
+
+    model.load_state_dict(state_dict)
+    model.to(device)
+    model.eval()
+
+    _logger.info("Model loaded successfully on device: %s", device)
+
+    return model, device

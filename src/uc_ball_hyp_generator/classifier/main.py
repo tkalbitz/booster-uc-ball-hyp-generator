@@ -15,34 +15,15 @@ from uc_ball_hyp_generator.classifier.dataset import BallClassifierDataset
 from uc_ball_hyp_generator.classifier.model import BallClassifier
 from uc_ball_hyp_generator.hyp_generator.config import (
     image_dir,
-    patch_height,
-    patch_width,
     testset_csv_collection,
     trainingset_csv_collection,
 )
-from uc_ball_hyp_generator.hyp_generator.model import get_ball_hyp_model
+from uc_ball_hyp_generator.hyp_generator.utils import load_ball_hyp_model
 from uc_ball_hyp_generator.utils.csv_label_reader import load_csv_collection
 from uc_ball_hyp_generator.utils.flops import get_flops
 from uc_ball_hyp_generator.utils.logger import get_logger
 
 _logger = get_logger(__name__)
-
-
-def load_hyp_model(weights_path: Path, device: torch.device) -> torch.nn.Module:
-    """Load the pre-trained hypothesis generator model."""
-    model = get_ball_hyp_model(patch_height, patch_width)
-
-    if weights_path.exists():
-        _logger.info("Loading hyp_model weights from %s", weights_path)
-        checkpoint = torch.load(weights_path, map_location=device, weights_only=True)
-        model.load_state_dict(checkpoint)
-    else:
-        msg = f"Weights file not found: {weights_path}"
-        raise FileNotFoundError(msg)
-
-    model.to(device)
-    model.eval()
-    return model
 
 
 def create_datasets(hyp_model: torch.nn.Module) -> tuple[BallClassifierDataset, BallClassifierDataset]:
@@ -161,7 +142,7 @@ def main() -> None:
 
     # Load hypothesis model
     weights_path = Path(args.weights)
-    hyp_model = load_hyp_model(weights_path, device)
+    hyp_model = load_ball_hyp_model(weights_path, device)
 
     # Create datasets
     train_dataset, val_dataset = create_datasets(hyp_model)
