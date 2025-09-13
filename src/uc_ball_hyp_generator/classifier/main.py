@@ -1,6 +1,7 @@
 """Training script for the ball classifier."""
 
 import argparse
+import multiprocessing
 from datetime import datetime
 from pathlib import Path
 
@@ -137,19 +138,36 @@ def main() -> None:
     args = parser.parse_args()
 
     # Setup device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
     _logger.info("Using device: %s", device)
 
     # Load hypothesis model
     weights_path = Path(args.weights)
-    hyp_model = load_ball_hyp_model(weights_path, device)
+    hyp_model = load_ball_hyp_model(weights_path, torch.device("cpu"))
 
     # Create datasets
     train_dataset, val_dataset = create_datasets(hyp_model)
 
     # Create data loaders
-    train_loader = DataLoader(train_dataset, batch_size=TRAIN_BATCH_SIZE, shuffle=True, num_workers=4)
-    val_loader = DataLoader(val_dataset, batch_size=VAL_BATCH_SIZE, shuffle=False, num_workers=4)
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=TRAIN_BATCH_SIZE,
+        shuffle=True,
+        num_workers=multiprocessing.cpu_count(),
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4,
+    )
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=VAL_BATCH_SIZE,
+        shuffle=False,
+        num_workers=multiprocessing.cpu_count(),
+        pin_memory=True,
+        persistent_workers=True,
+        prefetch_factor=4,
+    )
 
     classifier = BallClassifier().to(device)
     try:

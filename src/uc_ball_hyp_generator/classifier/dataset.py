@@ -11,6 +11,7 @@ from torch.utils.data import Dataset
 from torchvision.io import ImageReadMode, decode_image  # type: ignore[import-untyped]
 
 from uc_ball_hyp_generator.classifier.config import CPATCH_SIZE
+from uc_ball_hyp_generator.hyp_generator.ball_hypothesis_image_scaler import BallHypothesisImageScaler
 from uc_ball_hyp_generator.hyp_generator.config import scale_factor
 from uc_ball_hyp_generator.hyp_generator.utils import create_hpatch, transform_hyp_output_to_original_coords
 
@@ -38,18 +39,12 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
         self.negative_images = negative_images
         self.hyp_model = hyp_model
         self.hyp_model.eval()
+        self.hyp_model_device = next(self.hyp_model.parameters()).device
+        self.hyp_image_scaler = BallHypothesisImageScaler()
 
         # Data augmentation transforms
         self._brightness_jitter = transforms_v2.ColorJitter(brightness=0.15)
         self._horizontal_flip = transforms_v2.RandomHorizontalFlip(p=0.5)
-
-        # Image loading and scaling transform
-        self._image_transform = transforms_v2.Compose(
-            [
-                transforms_v2.ToDtype(torch.float32, scale=True),
-                transforms_v2.Resize((480 // scale_factor, 640 // scale_factor), antialias=True),
-            ]
-        )
 
     def __len__(self) -> int:
         """Return dataset size with 1:3 positive to negative ratio."""
@@ -123,7 +118,7 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
 
         # Convert to YUV and add batch dimension for model
         hpatch_yuv = kornia.color.rgb_to_yuv(hpatch.unsqueeze(0))
-
+        hpatch = hpatch.to(self.hyp_model_device)
         # Feed through hypothesis model
         with torch.no_grad():
             prediction = self.hyp_model(hpatch_yuv).squeeze(0)
@@ -144,8 +139,7 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
         original_image = decode_image(image_path, mode=ImageReadMode.RGB)
         original_image = transforms_v2.ToDtype(torch.float32, scale=True)(original_image)
 
-        # Create scaled version
-        scaled_image = self._image_transform(original_image)
+        scaled_image = self.hyp_image_scaler.load_and_scale(image_path)
 
         return original_image, scaled_image
 
