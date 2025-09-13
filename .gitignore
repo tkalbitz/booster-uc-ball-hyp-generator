@@ -14,8 +14,11 @@ wheels/
 
 # AI slob
 CLAUDE.md
+CONVENTIONS.md
 .claude
+.env.ai
 
 # Model and logging
 model/
 logs/
+.aider*

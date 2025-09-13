@@ -20,8 +20,9 @@ from uc_ball_hyp_generator.hyp_generator.config import (
     path_count_h,
     path_count_w,
     scale_factor,
+    scale_factor_f,
 )
-from uc_ball_hyp_generator.hyp_generator.scale_patch import scale_patch_x, scale_patch_y
+from uc_ball_hyp_generator.hyp_generator.scale_patch import scale_patch_x, scale_patch_y, scale_radius
 from uc_ball_hyp_generator.utils.clamp import clamp
 
 # Cache directory for preprocessed tensors
@@ -68,6 +69,8 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         self._brightness_jitter = transforms_v2.ColorJitter(brightness=0.15)
         self._coord_min = -1 + torch.finfo(torch.float32).eps
         self._coord_max = 1 - torch.finfo(torch.float32).eps
+        self._radius_min = -1 + torch.finfo(torch.float32).eps
+        self._radius_max = 1 - torch.finfo(torch.float32).eps
 
         # For test mode: precompute and cache all patches
         if not training:
@@ -77,6 +80,9 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
 
     def _clamp_coord(self, xy: float) -> float:
         return clamp(xy, self._coord_min, self._coord_max)
+
+    def _clamp_radius(self, xy: float) -> float:
+        return clamp(xy, self._radius_min, self._radius_max)
 
     def _precompute_test_data(self) -> None:
         """Precompute all test patches and points for GPU caching."""
@@ -91,7 +97,7 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         bbox = self.labels[idx]
 
         # Load and scale image with cached center point and diameter
-        image, center_x, center_y, diameter = self._load_and_scale_image(image_path, bbox)
+        image, center_x, center_y, diameter, diameter_s = self._load_and_scale_image(image_path, bbox)
 
         # Determine which patch contains the center
         patch_x = int(center_x // patch_width)
@@ -128,13 +134,16 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         point_x_scaled = atanh(point_x_scaled)
         point_y_scaled = atanh(point_y_scaled)
 
-        point = torch.tensor([point_x_scaled, point_y_scaled, diameter], dtype=torch.float32)
+        r_scaled = self._clamp_radius(scale_radius(diameter / 2.0))
+        r_scaled = atanh(r_scaled)
+
+        point = torch.tensor([point_x_scaled, point_y_scaled, r_scaled, diameter, diameter_s], dtype=torch.float32)
 
         return patch_yuv, point
 
     def _load_and_scale_image(
         self, image_path: str, bbox: tuple[int, int, int, int]
-    ) -> tuple[Tensor, float, float, float]:
+    ) -> tuple[Tensor, float, float, float, float]:
         """Load image using torchvision.io.decode_image, scale down, and return with center point and diameter."""
         cache_key = _get_cache_key(image_path, bbox)
         cache_path = _get_cache_path(cache_key)
@@ -148,6 +157,7 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
                     cached_data["center_x"],
                     cached_data["center_y"],
                     cached_data["diameter"],
+                    cached_data["diameter_s"],
                 )
             except (OSError, KeyError):
                 pass
@@ -166,10 +176,10 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         processed_image = transform(image_tensor)
 
         # Calculate scaled bbox and center point
-        x1_scaled = float(bbox[0]) / scale_factor
-        y1_scaled = float(bbox[1]) / scale_factor
-        x2_scaled = float(bbox[2]) / scale_factor
-        y2_scaled = float(bbox[3]) / scale_factor
+        x1_scaled = bbox[0] / scale_factor_f
+        y1_scaled = bbox[1] / scale_factor_f
+        x2_scaled = bbox[2] / scale_factor_f
+        y2_scaled = bbox[3] / scale_factor_f
 
         center_x = (x2_scaled + x1_scaled) / 2.0
         center_y = (y2_scaled + y1_scaled) / 2.0
@@ -178,6 +188,8 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         dx = x2_scaled - x1_scaled
         dy = y2_scaled - y1_scaled
         diameter = float(torch.sqrt(torch.tensor(dx * dx + dy * dy)).item())
+
+        diameter_s = max(1.0, min(bbox[2] - bbox[0], bbox[3] - bbox[1])) / scale_factor_f
 
         # Save to cache
         try:
@@ -188,13 +200,14 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
                     "center_x": center_x,
                     "center_y": center_y,
                     "diameter": diameter,
+                    "diameter_s": diameter_s,
                 },
                 cache_path,
             )
         except OSError:
             pass
 
-        return processed_image, center_x, center_y, diameter
+        return processed_image, center_x, center_y, diameter, diameter_s
 
     def _get_safe_crop_bounds(
         self, center_x: float, center_y: float, bbox: tuple[int, int, int, int]
@@ -255,7 +268,7 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         bbox = self.labels[idx]
 
         # Load and scale image with cached center point and diameter
-        image, center_x, center_y, diameter = self._load_and_scale_image(image_path, bbox)
+        image, center_x, center_y, diameter, diameter_s = self._load_and_scale_image(image_path, bbox)
         # image = image.to(self.device)
 
         # Get safe crop bounds
@@ -292,10 +305,13 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         point_x_scaled = atanh(point_x_scaled)
         point_y_scaled = atanh(point_y_scaled)
 
+        r_scaled = self._clamp_radius(scale_radius(diameter / 2.0))
+        r_scaled = atanh(r_scaled)
+
         # Convert RGB to YUV using Kornia
         patch_yuv = kornia.color.rgb_to_yuv(patch.unsqueeze(0)).squeeze(0)
 
-        point = torch.tensor([point_x_scaled, point_y_scaled, diameter], dtype=torch.float32)
+        point = torch.tensor([point_x_scaled, point_y_scaled, r_scaled, diameter, diameter_s], dtype=torch.float32)
 
         return patch_yuv, point
 

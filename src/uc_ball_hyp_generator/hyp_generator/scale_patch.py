@@ -9,6 +9,7 @@ from uc_ball_hyp_generator.utils.scale import scale
 
 _patch_output_width: float = (patch_width / 2) * 1.05
 _patch_output_height: float = (patch_height / 2) * 1.05
+_radius_output: float = 100
 
 T = TypeVar("T", float, torch.Tensor)
 
@@ -27,3 +28,11 @@ def scale_patch_y(x: T) -> T:
 
 def unscale_patch_y(x: T) -> T:
     return scale(x, -1, 1, -_patch_output_height, _patch_output_height)
+
+
+def scale_radius(x: T) -> T:
+    return scale(x, 0, _radius_output, -1, 1)
+
+
+def unscale_radius(x: T) -> T:
+    return scale(x, -1, 1, 0, _radius_output)

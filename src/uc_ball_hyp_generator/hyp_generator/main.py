@@ -2,11 +2,12 @@
 
 import numpy as np
 import torch
+from torch import optim
 
 import uc_ball_hyp_generator.hyp_generator.training as training
 from uc_ball_hyp_generator.hyp_generator.config import image_dir, testset_csv_collection, trainingset_csv_collection
 from uc_ball_hyp_generator.hyp_generator.dataset_handling import create_dataset
-from uc_ball_hyp_generator.hyp_generator.model_setup import create_model, create_training_components
+from uc_ball_hyp_generator.hyp_generator.model_setup import DistanceLoss, create_model
 from uc_ball_hyp_generator.hyp_generator.training import run_training_loop
 from uc_ball_hyp_generator.utils.csv_label_reader import load_csv_collection
 from uc_ball_hyp_generator.utils.logger import setup_logger
@@ -52,9 +53,11 @@ def main() -> None:
     training.test_steps_per_epoch = test_steps_per_epoch
 
     model, model_dir, log_dir = create_model(compile_model=True)
-    optimizer, criterion, scheduler, writer, csv_file = create_training_components(model, model_dir, log_dir)
+    optimizer = optim.AdamW(model.parameters(), lr=0.001, amsgrad=False)
+    criterion = DistanceLoss()
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=700)
 
-    run_training_loop(model, train_ds, test_ds, optimizer, criterion, scheduler, writer, csv_file, model_dir, device)
+    run_training_loop(model, train_ds, test_ds, optimizer, criterion, scheduler, model_dir, device)
 
 
 if __name__ == "__main__":

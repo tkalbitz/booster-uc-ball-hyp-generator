@@ -5,16 +5,13 @@ import shutil
 import sys
 import time
 from pathlib import Path
-from typing import TextIO
 
 import torch
-import torch.optim as optim
 from torch.nn import HuberLoss
-from torch.utils.tensorboard import SummaryWriter
 
 from uc_ball_hyp_generator.hyp_generator.config import patch_height, patch_width
 from uc_ball_hyp_generator.hyp_generator.model import get_ball_hyp_model
-from uc_ball_hyp_generator.hyp_generator.scale_patch import unscale_patch_x, unscale_patch_y
+from uc_ball_hyp_generator.hyp_generator.scale_patch import unscale_patch_x, unscale_patch_y, unscale_radius
 from uc_ball_hyp_generator.utils.flops import get_flops
 from uc_ball_hyp_generator.utils.logger import get_logger
 
@@ -58,13 +55,21 @@ class DistanceLoss(HuberLoss):
         y_p_x = unscale_patch_x(torch.tanh(y_pred[:, 0]))
         y_p_y = unscale_patch_y(torch.tanh(y_pred[:, 1]))
 
+        y_t_r = unscale_radius(torch.tanh(y_true[:, 2]))
+        y_p_r = unscale_radius(torch.tanh(y_pred[:, 2]))
+
         y_t_xy = torch.stack([y_t_x, y_t_y], dim=1)
         y_p_xy = torch.stack([y_p_x, y_p_y], dim=1)
 
-        r = self._logcosh(y_p_xy - y_t_xy)
-        e = torch.exp(self.confidence_scale / y_true[:, 2])
+        y_r = y_t_r - y_p_r
+
+        xy = self._logcosh(torch.abs(y_p_xy - y_t_xy))
+        r = self._logcosh(torch.abs(y_r))
+        e = torch.exp(self.confidence_scale / y_true[:, 3])
+
+        xy = xy * e.unsqueeze(1)
         r = r * e.unsqueeze(1)
-        return torch.mean(r)
+        return torch.mean(r) + torch.mean(xy)
 
 
 def create_model(compile_model: bool = True) -> tuple[torch.nn.Module, str, str]:
@@ -108,22 +113,6 @@ def create_model(compile_model: bool = True) -> tuple[torch.nn.Module, str, str]
         _logger.warning("Could not calculate FLOPs: %s", e)
 
     return model, model_dir, log_dir
-
-
-def create_training_components(
-    model: torch.nn.Module, model_dir: str, log_dir: str
-) -> tuple[torch.optim.Optimizer, torch.nn.Module, torch.optim.lr_scheduler.LRScheduler, SummaryWriter, TextIO]:
-    """Create optimizer, loss function, and logging components."""
-    optimizer = optim.AdamW(model.parameters(), lr=0.001, amsgrad=False)
-    criterion = DistanceLoss()
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=700)
-
-    writer = SummaryWriter(log_dir)
-
-    csv_file = open(os.path.join(model_dir, "training.csv"), "w")
-    csv_file.write("epoch,loss,val_loss,accuracy,val_accuracy,found_balls,val_found_balls\\n")
-
-    return optimizer, criterion, scheduler, writer, csv_file
 
 
 def compile_existing_model(model: torch.nn.Module, mode: str = "default") -> torch.nn.Module:

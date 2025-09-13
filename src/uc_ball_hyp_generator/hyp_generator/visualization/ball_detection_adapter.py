@@ -8,6 +8,7 @@ with ball detection annotations using EllipseShape.
 import logging
 import os
 from dataclasses import dataclass
+from math import tanh
 from pathlib import Path
 
 import kornia
@@ -24,7 +25,7 @@ from uc_ball_hyp_generator.hyp_generator.config import (
     scale_factor_f,
 )
 from uc_ball_hyp_generator.hyp_generator.model import get_ball_hyp_model
-from uc_ball_hyp_generator.hyp_generator.scale_patch import unscale_patch_x, unscale_patch_y
+from uc_ball_hyp_generator.hyp_generator.scale_patch import unscale_patch_x, unscale_patch_y, unscale_radius
 
 _logger = logging.getLogger(__name__)
 
@@ -157,19 +158,22 @@ def _postprocess_predictions(predictions: torch.Tensor, preprocessed: Preprocess
 
     # Filter predictions to only include likely ball detections
     # We'll use a threshold approach - only show patches where the model is confident
-    for i, (pred_x, pred_y) in enumerate(predictions):
+    for i, (pred_x, pred_y, pred_r) in enumerate(predictions):
         patch_start_x, patch_start_y = preprocessed.patch_positions[i]
         # Unscale the coordinates (convert from model output space to patch coordinates)
-        ball_x_patch = float(unscale_patch_x(pred_x.item()))
-        ball_y_patch = float(unscale_patch_y(pred_y.item()))
+        ball_x_patch = float(unscale_patch_x(tanh(pred_x.item())))
+        ball_y_patch = float(unscale_patch_y(tanh(pred_y.item())))
+        ball_r = float(unscale_radius(torch.tanh(pred_r)))
 
         # Convert from patch-local coordinates to scaled image coordinates
         ball_x_scaled = ball_x_patch + patch_width / 2 + patch_start_x
         ball_y_scaled = ball_y_patch + patch_height / 2 + patch_start_y
+        ball_d = ball_r * 2
 
         # Convert from scaled image coordinates to original image coordinates
         ball_x_orig = ball_x_scaled * scale_factor_f
         ball_y_orig = ball_y_scaled * scale_factor_f
+        ball_d_orig = ball_d * scale_factor_f
 
         # Convert to relative coordinates (0-1) for the visualizer
         rel_x = ball_x_orig / preprocessed.original_size[0]  # width
@@ -183,8 +187,8 @@ def _postprocess_predictions(predictions: torch.Tensor, preprocessed: Preprocess
         # This helps filter out patches without balls
         if 0 <= ball_x_orig <= orig_size_x and 0 <= ball_y_orig <= orig_size_y:
             # Define ellipse size (relative to image size)
-            ellipse_width = 0.02  # 2% of image width
-            ellipse_height = 0.02  # 2% of image height
+            ellipse_width = ball_d_orig / preprocessed.original_size[0]
+            ellipse_height = ball_d_orig / preprocessed.original_size[1]
 
             # Create ellipse shape centered at predicted position
             center = Point(x=rel_x, y=rel_y)

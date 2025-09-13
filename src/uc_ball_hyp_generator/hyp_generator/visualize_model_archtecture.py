@@ -56,7 +56,7 @@ def visualize_forward_pass(input_height: int = 224, input_width: int = 224) -> N
         print(f"After feature block {i + 1}: {x.shape}")
 
     # Classifier
-    x = model.classifier(x)
+    x = model.coord_xy_classifier(x)
     print(f"Final output: {x.shape}")
 
 
