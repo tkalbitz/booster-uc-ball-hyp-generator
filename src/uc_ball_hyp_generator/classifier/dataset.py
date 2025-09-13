@@ -27,6 +27,7 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
         positive_labels: list[tuple[int, int, int, int]],
         negative_images: list[str],
         hyp_model: Module,
+        is_training: bool,
     ) -> None:
         """Initialize the ball classifier dataset.
 
@@ -39,6 +40,7 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
         self.positive_images = positive_images
         self.positive_labels = positive_labels
         self.negative_images = negative_images
+        self.is_training = is_training
         self.hyp_model = hyp_model
         self.hyp_model.eval()
         self.hyp_model_device = next(self.hyp_model.parameters()).device
@@ -47,7 +49,7 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
         self.jpg_cache_dir.mkdir(parents=True, exist_ok=True)
 
         # Data augmentation transforms
-        self._brightness_jitter = transforms_v2.ColorJitter(brightness=0.15)
+        self._brightness_jitter = transforms_v2.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2, hue=0.1)
         self._horizontal_flip = transforms_v2.RandomHorizontalFlip(p=0.5)
 
     def __len__(self) -> int:
@@ -210,10 +212,11 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
         crop_resized = resize_transform(crop)
 
         # Apply data augmentation
-        crop_augmented = self._brightness_jitter(crop_resized)
-        crop_augmented = self._horizontal_flip(crop_augmented)
+        if self.is_training:
+            crop_resized = self._brightness_jitter(crop_resized)
+            crop_resized = self._horizontal_flip(crop_resized)
 
         # Convert to YUV
-        cpatch_yuv = kornia.color.rgb_to_yuv(crop_augmented)
+        cpatch_yuv = kornia.color.rgb_to_yuv(crop_resized)
 
         return cpatch_yuv

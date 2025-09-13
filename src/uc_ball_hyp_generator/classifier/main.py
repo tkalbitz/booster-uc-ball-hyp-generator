@@ -50,9 +50,13 @@ def create_datasets(hyp_model: torch.nn.Module) -> tuple[BallClassifierDataset, 
     _logger.info("Test set: %d positive, %d negative images", len(test_positive_imgs), len(test_negative_imgs))
 
     # Create datasets
-    train_dataset = BallClassifierDataset(train_positive_imgs, train_positive_labels, train_negative_imgs, hyp_model)
+    train_dataset = BallClassifierDataset(
+        train_positive_imgs, train_positive_labels, train_negative_imgs, hyp_model, is_training=True
+    )
 
-    val_dataset = BallClassifierDataset(test_positive_imgs, test_positive_labels, test_negative_imgs, hyp_model)
+    val_dataset = BallClassifierDataset(
+        test_positive_imgs, test_positive_labels, test_negative_imgs, hyp_model, is_training=False
+    )
 
     return train_dataset, val_dataset
 
