@@ -109,7 +109,7 @@ def transform_hyp_output_to_original_coords(
     return original_center_x, original_center_y, original_diameter
 
 
-def load_ball_hyp_model(model_weights_path: Path, device: device):
+def load_ball_hyp_model(model_weights_path: Path, device: device) -> torch.nn.Module:
     """Load the ball hypothesis model."""
 
     current_model_path = model_weights_path
@@ -140,4 +140,4 @@ def load_ball_hyp_model(model_weights_path: Path, device: device):
 
     _logger.info("Model loaded successfully on device: %s", device)
 
-    return model, device
+    return model
