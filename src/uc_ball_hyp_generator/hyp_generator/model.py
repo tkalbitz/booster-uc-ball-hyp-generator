@@ -53,6 +53,64 @@ class NetworkV2Hypercolumn(nn.Module):
     def __init__(self, input_height: int, input_width: int, num_classes: int = 3) -> None:
         super().__init__()
 
+        # Feature extraction backbone with half the filters
+        self.backbone = nn.Sequential(
+            nn.BatchNorm2d(3),
+            Conv2dBn(3, 8, kernel_size=3, stride=1, padding=1, activation="relu"),
+        )
+
+        # Feature processing blocks with half the filters
+        self.feature_blocks = nn.ModuleList(
+            [
+                # Block 0: in=8, filter_count=10 -> out=(10/2)+10=15
+                nn.Sequential(BigLittleReduction(8, 10, "relu"), nn.Dropout(0.2)),
+                # Block 1: in=15, filter_count=12 -> out=(12/2)+12=18
+                nn.Sequential(BigLittleReduction(15, 12, "relu"), SEBlock(18), nn.Dropout(0.1)),
+                # Block 2: in=18, filter_count=12 -> out=(12/2)+12=18
+                nn.Sequential(BigLittleReduction(18, 12, "relu"), SEBlock(18), nn.Dropout(0.1)),
+                # Block 3: in=18, filter_count=14 -> out=(14/2)+14=21
+                nn.Sequential(BigLittleReduction(18, 14, "relu"), SEBlock(21), nn.Dropout(0.1)),
+            ]
+        )
+
+        # Hypercolumn classifier with reduced input size
+        # Total channels: 8 (backbone) + 15 + 18 + 18 + 21 = 80
+        hypercolumn_channels = 80
+        self.hypercolumn_classifier = nn.Sequential(
+            nn.Linear(hypercolumn_channels, 32),
+            nn.BatchNorm1d(32),
+            nn.ReLU(),
+            nn.Linear(32, num_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        feature_maps = []
+
+        # 1. Pass through backbone and capture its output
+        x = self.backbone(x)
+        feature_maps.append(x)
+
+        # 2. Pass through each feature block and capture their outputs
+        for block in self.feature_blocks:
+            x = block(x)
+            feature_maps.append(x)
+
+        # 3. Pool each captured feature map to a vector and flatten
+        pooled_vectors = [torch.flatten(F.adaptive_avg_pool2d(fm, (1, 1)), 1) for fm in feature_maps]
+
+        # 4. Concatenate all vectors to form the hypercolumn
+        hypercolumn_vector = torch.cat(pooled_vectors, dim=1)
+
+        # 5. Pass the hypercolumn vector to the classifier
+        out = self.hypercolumn_classifier(hypercolumn_vector)
+
+        return out
+
+
+class NetworkV2HypercolumnDouble(nn.Module):
+    def __init__(self, input_height: int, input_width: int, num_classes: int = 3) -> None:
+        super().__init__()
+
         # Feature extraction backbone with doubled filters
         self.backbone = nn.Sequential(
             nn.BatchNorm2d(3),
@@ -109,4 +167,4 @@ class NetworkV2Hypercolumn(nn.Module):
 
 
 def get_ball_hyp_model(input_height: int, input_width: int) -> nn.Module:
-    return NetworkV2Hypercolumn(input_height=input_height, input_width=input_width, num_classes=3)
+    return NetworkV2(input_height=input_height, input_width=input_width, num_classes=3)

@@ -76,6 +76,14 @@ def create_model(compile_model: bool = True) -> tuple[torch.nn.Module, str, str]
     """Create and initialize the model."""
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = get_ball_hyp_model(patch_height, patch_width)
+
+    try:
+        flops = get_flops(model, (3, patch_height, patch_width))
+        _logger.info("Model has %.2f MFlops", flops / 1e6)
+    except Exception as e:
+        _logger.warning("Could not calculate FLOPs: %s", e)
+
+    model = get_ball_hyp_model(patch_height, patch_width)
     model = model.to(device)
 
     # Apply PyTorch 2.0 compilation for better performance
@@ -105,12 +113,6 @@ def create_model(compile_model: bool = True) -> tuple[torch.nn.Module, str, str]
     os.makedirs(log_dir)
 
     torch.save(model.state_dict(), os.path.join(model_dir, "model_weights.pth"))
-
-    try:
-        flops = get_flops(model, (3, patch_height, patch_width))
-        _logger.info("Model has %.2f MFlops", flops / 1e6)
-    except Exception as e:
-        _logger.warning("Could not calculate FLOPs: %s", e)
 
     return model, model_dir, log_dir
 
