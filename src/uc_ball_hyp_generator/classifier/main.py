@@ -10,10 +10,12 @@ from torch.nn import BCELoss
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.utils.data import DataLoader
+from torchinfo import summary
+from tqdm import tqdm
 
 from uc_ball_hyp_generator.classifier.config import CPATCH_SIZE, TRAIN_BATCH_SIZE, VAL_BATCH_SIZE
 from uc_ball_hyp_generator.classifier.dataset import BallClassifierDataset
-from uc_ball_hyp_generator.classifier.model import BallClassifier
+from uc_ball_hyp_generator.classifier.model import BallClassifier, BallClassifierHypercolumn
 from uc_ball_hyp_generator.hyp_generator.config import (
     image_dir,
     testset_csv_collection,
@@ -67,7 +69,10 @@ def train_epoch(
     total_loss = 0.0
     num_batches = 0
 
-    for batch_idx, (patches, labels) in enumerate(dataloader):
+    # Create progress bar for training batches
+    progress_bar = tqdm(enumerate(dataloader), total=len(dataloader), desc="Training")
+
+    for batch_idx, (patches, labels) in progress_bar:
         patches = patches.to(device)
         labels = labels.to(device)
 
@@ -84,8 +89,8 @@ def train_epoch(
         total_loss += loss.item()
         num_batches += 1
 
-        if batch_idx % 100 == 0:
-            _logger.info("Batch %d, Loss: %.4f", batch_idx, loss.item())
+        # Update progress bar with current loss
+        progress_bar.set_postfix(loss=loss.item())
 
     return total_loss / num_batches if num_batches > 0 else 0.0
 
@@ -102,8 +107,11 @@ def validate(
     correct = 0
     total = 0
 
+    # Create progress bar for validation batches
+    progress_bar = tqdm(dataloader, total=len(dataloader), desc="Validation")
+
     with torch.no_grad():
-        for patches, labels in dataloader:
+        for patches, labels in progress_bar:
             patches = patches.to(device)
             labels = labels.to(device)
 
@@ -114,8 +122,14 @@ def validate(
 
             # Calculate accuracy
             predicted = (outputs > 0.5).float()
-            correct += (predicted == labels).sum().item()
-            total += labels.size(0)
+            batch_correct = (predicted == labels).sum().item()
+            batch_total = labels.size(0)
+            correct += batch_correct
+            total += batch_total
+
+            # Update progress bar with current accuracy
+            batch_accuracy = batch_correct / batch_total if batch_total > 0 else 0.0
+            progress_bar.set_postfix(accuracy=batch_accuracy)
 
     avg_loss = total_loss / len(dataloader) if len(dataloader) > 0 else 0.0
     accuracy = correct / total if total > 0 else 0.0
@@ -169,7 +183,9 @@ def main() -> None:
         prefetch_factor=4,
     )
 
-    classifier = BallClassifier().to(device)
+    classifier = BallClassifierHypercolumn().to("cpu")
+    _logger.info(summary(classifier, input_size=(1, 3, CPATCH_SIZE, CPATCH_SIZE)))
+    classifier = BallClassifierHypercolumn().to(torch.device("cpu"))
     try:
         flops = get_flops(classifier, (3, CPATCH_SIZE, CPATCH_SIZE))
         _logger.info("Model has %.2f MFlops", flops / 1e6)
@@ -177,7 +193,7 @@ def main() -> None:
         _logger.warning("Could not calculate FLOPs: %s", e)
 
     # Create classifier model
-    classifier = BallClassifier().to(device)
+    classifier = BallClassifierHypercolumn().to(device)
 
     # Setup training components
     optimizer = AdamW(classifier.parameters(), lr=args.learning_rate, weight_decay=1e-4)
