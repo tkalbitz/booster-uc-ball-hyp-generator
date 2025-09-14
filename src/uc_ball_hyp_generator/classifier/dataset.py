@@ -78,7 +78,6 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
 
         # Load and scale the image
         original_image, scaled_image = self._load_and_scale_image(image_path)
-        original_height, original_width = original_image.shape[1], original_image.shape[2]
 
         # Scale bbox to match scaled image coordinates
         scaled_bbox = (
@@ -114,7 +113,6 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
 
         # Load and scale the image
         original_image, scaled_image = self._load_and_scale_image(image_path)
-        original_height, original_width = original_image.shape[1], original_image.shape[2]
 
         # Extract a completely random hpatch from scaled image
         hpatch, hpatch_x, hpatch_y = self._extract_random_hpatch(scaled_image)
