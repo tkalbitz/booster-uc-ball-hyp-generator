@@ -15,10 +15,10 @@ from torchvision.io import ImageReadMode, decode_image  # type: ignore[import-un
 from uc_ball_hyp_generator.hyp_generator.config import (
     img_scaled_height,
     img_scaled_width,
+    patch_count_h,
+    patch_count_w,
     patch_height,
     patch_width,
-    path_count_h,
-    path_count_w,
     scale_factor,
     scale_factor_f,
 )
@@ -104,8 +104,8 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         patch_y = int(center_y // patch_height)
 
         # Clamp to valid patch indices
-        patch_x = max(0, min(patch_x, path_count_w - 1))
-        patch_y = max(0, min(patch_y, path_count_h - 1))
+        patch_x = max(0, min(patch_x, patch_count_w - 1))
+        patch_y = max(0, min(patch_y, patch_count_h - 1))
 
         # Extract patch
         start_x = patch_x * patch_width
