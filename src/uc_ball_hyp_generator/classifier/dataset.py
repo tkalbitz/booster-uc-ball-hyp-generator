@@ -15,7 +15,7 @@ from torchvision.io import ImageReadMode, decode_image, write_jpeg  # type: igno
 from uc_ball_hyp_generator.classifier.config import CPATCH_SIZE
 from uc_ball_hyp_generator.hyp_generator.ball_hypothesis_image_scaler import BallHypothesisImageScaler
 from uc_ball_hyp_generator.hyp_generator.config import scale_factor
-from uc_ball_hyp_generator.hyp_generator.utils import create_hpatch, transform_hyp_output_to_original_coords
+from uc_ball_hyp_generator.hyp_generator.utils import create_random_hpatch, transform_hyp_output_to_original_coords
 
 
 class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
@@ -89,7 +89,7 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
         )
 
         # Create hpatch that contains the ball
-        hpatch, hpatch_position = create_hpatch(scaled_image, scaled_bbox)
+        hpatch, hpatch_position = create_random_hpatch(scaled_image, scaled_bbox)
 
         # Convert to YUV and add batch dimension for model
         hpatch_yuv = kornia.color.rgb_to_yuv(hpatch.unsqueeze(0))
@@ -99,9 +99,7 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
             prediction = self.hyp_model(hpatch_yuv).squeeze(0)
 
         # Transform prediction to original image coordinates
-        center_x, center_y, diameter = transform_hyp_output_to_original_coords(
-            prediction, hpatch_position, (original_width, original_height)
-        )
+        center_x, center_y, diameter = transform_hyp_output_to_original_coords(prediction, hpatch_position)
 
         # Extract cpatch from original image
         cpatch = self._extract_cpatch(original_image, center_x, center_y, diameter)
@@ -130,9 +128,7 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
             prediction = self.hyp_model(hpatch_yuv).squeeze(0)
 
         # Transform prediction to original image coordinates
-        center_x, center_y, diameter = transform_hyp_output_to_original_coords(
-            prediction, hpatch_position, (original_width, original_height)
-        )
+        center_x, center_y, diameter = transform_hyp_output_to_original_coords(prediction, hpatch_position)
 
         # Extract cpatch from original image
         cpatch = self._extract_cpatch(original_image, center_x, center_y, diameter)

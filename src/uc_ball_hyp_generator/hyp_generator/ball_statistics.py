@@ -89,11 +89,13 @@ def compute_statistics(labels: List[Tuple[int, int, int, int]]) -> None:
             print(f"  {ratio}: {cnt} balls")
 
 
-def main():
+def main() -> None:
     png_files: dict[str, str] = {f.name: str(f) for f in image_dir.glob("**/*.png")}
 
-    train_img, train_labels, skipped_trainingset = load_csv_collection(trainingset_csv_collection, png_files)
-    test_img, test_labels, skipped_testset = load_csv_collection(testset_csv_collection, png_files)
+    train_img, train_labels, neg_images, skipped_trainingset = load_csv_collection(
+        trainingset_csv_collection, png_files
+    )
+    test_img, test_labels, neg_images, skipped_testset = load_csv_collection(testset_csv_collection, png_files)
 
     all_labels = train_labels + test_labels
     compute_statistics(all_labels)

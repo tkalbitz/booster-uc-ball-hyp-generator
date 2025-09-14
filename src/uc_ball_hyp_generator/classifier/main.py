@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 from uc_ball_hyp_generator.classifier.config import CPATCH_SIZE, TRAIN_BATCH_SIZE, VAL_BATCH_SIZE
 from uc_ball_hyp_generator.classifier.dataset import BallClassifierDataset
-from uc_ball_hyp_generator.classifier.model import BallClassifier, BallClassifierHypercolumn
+from uc_ball_hyp_generator.classifier.model import BallClassifierHypercolumn
 from uc_ball_hyp_generator.hyp_generator.config import (
     image_dir,
     testset_csv_collection,
@@ -62,7 +62,7 @@ def create_datasets(hyp_model: torch.nn.Module) -> tuple[BallClassifierDataset, 
 
 
 def train_epoch(
-    model: BallClassifier,
+    model: torch.nn.Module,
     dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
     optimizer: AdamW,
     criterion: BCELoss,
@@ -100,7 +100,7 @@ def train_epoch(
 
 
 def validate(
-    model: BallClassifier,
+    model: torch.nn.Module,
     dataloader: DataLoader[tuple[torch.Tensor, torch.Tensor]],
     criterion: BCELoss,
     device: torch.device,

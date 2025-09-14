@@ -19,7 +19,7 @@ from uc_ball_hyp_generator.utils.logger import get_logger
 _logger = get_logger(__name__)
 
 
-def create_hpatch(
+def create_random_hpatch(
     scaled_image: Tensor, scaled_bbox: tuple[float, float, float, float]
 ) -> tuple[Tensor, tuple[int, int]]:
     """Extract a random safe crop from scaled image containing the ball.
@@ -76,14 +76,13 @@ def create_hpatch(
 
 
 def transform_hyp_output_to_original_coords(
-    prediction: Tensor, hpatch_position: tuple[int, int], original_img_size: tuple[int, int]
+    prediction: Tensor, hpatch_upper_left_corner: tuple[int, int]
 ) -> tuple[float, float, float]:
     """Convert hypothesis model output to original image coordinates.
 
     Args:
         prediction: Raw 3-element prediction tensor (pred_x, pred_y, pred_r) from hyp_model
         hpatch_position: Top-left position of hpatch in scaled image (start_x, start_y)
-        original_img_size: Size of original image (width, height)
 
     Returns:
         Tuple of (center_x, center_y, diameter) in original image coordinates
@@ -97,7 +96,7 @@ def transform_hyp_output_to_original_coords(
     radius = unscale_radius(pred_r.item())
 
     # Convert patch-relative to scaled image coordinates
-    hpatch_start_x, hpatch_start_y = hpatch_position
+    hpatch_start_x, hpatch_start_y = hpatch_upper_left_corner
     scaled_center_x = hpatch_start_x + patch_width / 2 + patch_rel_x
     scaled_center_y = hpatch_start_y + patch_height / 2 + patch_rel_y
 
