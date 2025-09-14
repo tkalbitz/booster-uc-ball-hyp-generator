@@ -1,5 +1,6 @@
 """Shared utility functions for hypothesis generator and classifier."""
 
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
@@ -17,6 +18,15 @@ from uc_ball_hyp_generator.hyp_generator.scale_patch import unscale_patch_x, uns
 from uc_ball_hyp_generator.utils.logger import get_logger
 
 _logger = get_logger(__name__)
+
+
+@dataclass
+class BallHypothesis:
+    """Dataclass representing a ball hypothesis with center coordinates and diameter."""
+
+    center_x: float
+    center_y: float
+    diameter: float
 
 
 def create_random_hpatch(
@@ -140,3 +150,66 @@ def load_ball_hyp_model(model_weights_path: Path, device: device) -> torch.nn.Mo
     _logger.info("Model loaded successfully on device: %s", device)
 
     return model
+
+
+def run_ball_hyp_model(model: torch.nn.Module, scaled_yuv_image: Tensor) -> list[BallHypothesis]:
+    """Run ball hypothesis model on scaled YUV image by processing patches in batch.
+
+    Args:
+        model: Loaded ball hypothesis model
+        scaled_yuv_image: Scaled image tensor in YUV color space with shape (3, H, W)
+
+    Returns:
+        List of BallHypothesis objects with center coordinates and diameter in original image coordinates
+    """
+    img_height, img_width = scaled_yuv_image.shape[1], scaled_yuv_image.shape[2]
+    
+    # Calculate number of patches dynamically based on image dimensions
+    n_patches_w = (img_width + patch_width - 1) // patch_width
+    n_patches_h = (img_height + patch_height - 1) // patch_height
+    total_patches = n_patches_w * n_patches_h
+    
+    # Pre-allocate batch tensor
+    batch = torch.zeros((total_patches, 3, patch_height, patch_width), 
+                       device=scaled_yuv_image.device, dtype=scaled_yuv_image.dtype)
+    
+    patch_positions = []
+    patch_idx = 0
+    
+    # Collect all patches and their positions
+    for i in range(n_patches_w):
+        for j in range(n_patches_h):
+            # Calculate initial patch coordinates
+            start_x = i * patch_width
+            start_y = j * patch_height
+
+            # Adjust start positions to ensure patch stays within image boundaries
+            if start_x + patch_width > img_width:
+                start_x = img_width - patch_width
+            if start_y + patch_height > img_height:
+                start_y = img_height - patch_height
+
+            # Ensure start positions are non-negative
+            start_x = max(0, start_x)
+            start_y = max(0, start_y)
+
+            # Extract patch from image and add to batch
+            end_x = start_x + patch_width
+            end_y = start_y + patch_height
+            batch[patch_idx] = scaled_yuv_image[:, start_y:end_y, start_x:end_x]
+            patch_positions.append((start_x, start_y))
+            patch_idx += 1
+
+    # Run model on entire batch
+    with torch.no_grad():
+        outputs = model(batch)
+
+    # Process all outputs
+    hypotheses = []
+    for idx, output in enumerate(outputs):
+        center_x, center_y, diameter = transform_hyp_output_to_original_coords(
+            output, patch_positions[idx]
+        )
+        hypotheses.append(BallHypothesis(center_x=center_x, center_y=center_y, diameter=diameter))
+
+    return hypotheses
