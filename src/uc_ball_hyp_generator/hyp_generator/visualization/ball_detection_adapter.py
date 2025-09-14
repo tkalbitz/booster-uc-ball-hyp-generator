@@ -7,8 +7,6 @@ with ball detection annotations using EllipseShape.
 
 import logging
 import os
-from dataclasses import dataclass
-from math import tanh
 from pathlib import Path
 
 import kornia
@@ -22,26 +20,15 @@ from uc_ball_hyp_generator.hyp_generator.config import (
     img_scaled_width,
     patch_height,
     patch_width,
-    scale_factor_f,
 )
-from uc_ball_hyp_generator.hyp_generator.model import get_ball_hyp_model
-from uc_ball_hyp_generator.hyp_generator.scale_patch import unscale_patch_x, unscale_patch_y, unscale_radius
+from uc_ball_hyp_generator.hyp_generator.utils import BallHypothesis, load_ball_hyp_model, run_ball_hyp_model
 
 _logger = logging.getLogger(__name__)
 
 # Global model instance to avoid reloading
-_model = None
-_device = None
-_model_path = None
-
-
-@dataclass
-class PreprocessedImage:
-    """Container for preprocessed image data with patches and metadata."""
-
-    patch_batch: torch.Tensor  # (num_patches, C, H, W) tensor of all image patches
-    original_size: tuple[int, int]  # (width, height) of original image
-    patch_positions: list[tuple[int, int]]  # List of (start_x, start_y) for each patch
+_model: torch.nn.Module | None = None
+_device: torch.device | None = None
+_model_path: str | None = None
 
 
 def _get_model_path() -> str:
@@ -65,50 +52,26 @@ def _load_model() -> tuple[torch.nn.Module, torch.device]:
     current_model_path = _get_model_path()
 
     if _model is None or _model_path != current_model_path:
-        _logger.info("Loading ball detection model from: %s", current_model_path)
-
         _device = torch.device("cpu")
         if torch.cuda.is_available():
             _device = torch.device("cuda")
 
-        _model = get_ball_hyp_model(patch_height, patch_width)
-
-        # Load state dict and handle torch.compile prefixes
-        state_dict = torch.load(current_model_path, map_location=_device)
-
-        # Check if this is a compiled model (has _orig_mod. prefixes)
-        if any(key.startswith("_orig_mod.") for key in state_dict.keys()):
-            _logger.info("Detected compiled model, removing _orig_mod. prefixes")
-            # Remove _orig_mod. prefixes from compiled model
-            cleaned_state_dict = {}
-            for key, value in state_dict.items():
-                if key.startswith("_orig_mod."):
-                    cleaned_key = key[len("_orig_mod.") :]
-                    cleaned_state_dict[cleaned_key] = value
-                else:
-                    cleaned_state_dict[key] = value
-            state_dict = cleaned_state_dict
-
-        _model.load_state_dict(state_dict)
-        _model.to(_device)
-        _model.eval()
+        _model = load_ball_hyp_model(Path(current_model_path), _device)
         _model_path = current_model_path
-
-        _logger.info("Model loaded successfully on device: %s", _device)
 
     return _model, _device
 
 
-def _preprocess_image(image_path: str) -> PreprocessedImage:
-    """Load and preprocess image for model inference, splitting into patches."""
-    # Load image using torchvision.io.decode_image as in dataset_handling.py
+def _preprocess_image(image_path: str) -> tuple[torch.Tensor, tuple[int, int]]:
+    """Load and preprocess image for model inference."""
+    # Load image using torchvision.io.decode_image
     image_tensor = decode_image(image_path, mode=ImageReadMode.RGB)
 
     # Get original size before scaling
     original_height, original_width = image_tensor.shape[1], image_tensor.shape[2]
     original_size = (original_width, original_height)  # (width, height)
 
-    # Convert from uint8 [0, 255] to float32 [0, 1] and resize as in dataset_handling.py
+    # Convert from uint8 [0, 255] to float32 [0, 1] and resize
     transform = transforms_v2.Compose(
         [
             transforms_v2.ToDtype(torch.float32, scale=True),
@@ -116,97 +79,44 @@ def _preprocess_image(image_path: str) -> PreprocessedImage:
         ]
     )
 
-    processed_image = transform(image_tensor)  # (C, H, W)
+    processed_image = transform(image_tensor)  # (C, H, W) in RGB [0,1]
 
-    # Convert RGB to YUV using Kornia as in dataset_handling.py
-    yuv_tensor = kornia.color.rgb_to_yuv(processed_image.unsqueeze(0)).squeeze(0)  # (C, H, W)
+    # Convert RGB to YUV using Kornia
+    yuv_image = kornia.color.rgb_to_yuv(processed_image.unsqueeze(0)).squeeze(0)  # (C, H, W) in YUV
 
-    # Split image into patches
-    patches_y = img_scaled_height // patch_height
-    patches_x = img_scaled_width // patch_width
-
-    patches: list[torch.Tensor] = []
-    patch_positions: list[tuple[int, int]] = []
-
-    for py in range(patches_y):
-        for px in range(patches_x):
-            start_y = py * patch_height
-            end_y = start_y + patch_height
-            start_x = px * patch_width
-            end_x = start_x + patch_width
-
-            # Extract patch from CHW tensor
-            patch = yuv_tensor[:, start_y:end_y, start_x:end_x]  # (C, H, W)
-            patches.append(patch)
-
-            # Store patch position for coordinate conversion
-            patch_positions.append((start_x, start_y))
-
-    # Stack all patches into a batch
-    patch_batch = torch.stack(patches)  # (num_patches, C, H, W)
-
-    return PreprocessedImage(patch_batch=patch_batch, original_size=original_size, patch_positions=patch_positions)
+    return yuv_image, original_size
 
 
-def _postprocess_predictions(predictions: torch.Tensor, preprocessed: PreprocessedImage) -> list[Annotation]:
-    """Convert model predictions to visualization annotations."""
-    annotations: list[Annotation] = []
+def _convert_hypothesis_to_annotation(hyp: BallHypothesis, original_size: tuple[int, int]) -> Annotation:
+    """Convert ball hypothesis to visualization annotation."""
+    orig_size_x, orig_size_y = original_size
 
-    _logger.info("Original size %d/%d.", preprocessed.original_size[0], preprocessed.original_size[1])
+    # Convert to relative coordinates (0-1) for the visualizer
+    rel_x = hyp.center_x / orig_size_x
+    rel_y = hyp.center_y / orig_size_y
 
-    orig_size_x, orig_size_y = preprocessed.original_size[0], preprocessed.original_size[1]
+    # Clamp to valid range
+    rel_x = max(0.0, min(1.0, rel_x))
+    rel_y = max(0.0, min(1.0, rel_y))
 
-    # Filter predictions to only include likely ball detections
-    # We'll use a threshold approach - only show patches where the model is confident
-    for i, (pred_x, pred_y, pred_r) in enumerate(predictions):
-        patch_start_x, patch_start_y = preprocessed.patch_positions[i]
-        # Unscale the coordinates (convert from model output space to patch coordinates)
-        ball_x_patch = float(unscale_patch_x(tanh(pred_x.item())))
-        ball_y_patch = float(unscale_patch_y(tanh(pred_y.item())))
-        ball_r = float(unscale_radius(torch.tanh(pred_r)))
+    # Define ellipse size (relative to image size)
+    ellipse_width = hyp.diameter / orig_size_x
+    ellipse_height = hyp.diameter / orig_size_y
 
-        # Convert from patch-local coordinates to scaled image coordinates
-        ball_x_scaled = ball_x_patch + patch_width / 2 + patch_start_x
-        ball_y_scaled = ball_y_patch + patch_height / 2 + patch_start_y
-        ball_d = ball_r * 2
+    # Create ellipse shape centered at predicted position
+    center = Point(x=rel_x, y=rel_y)
+    shape = EllipseShape(center=center, width=ellipse_width, height=ellipse_height)
 
-        # Convert from scaled image coordinates to original image coordinates
-        ball_x_orig = ball_x_scaled * scale_factor_f
-        ball_y_orig = ball_y_scaled * scale_factor_f
-        ball_d_orig = ball_d * scale_factor_f
+    # Create annotation
+    annotation = Annotation(
+        shape=shape,
+        text="ball",
+        accuracy=None,
+        color="#FF4500",  # Orange color for ball
+        outline_color="#FFFFFF",  # White outline
+    )
 
-        # Convert to relative coordinates (0-1) for the visualizer
-        rel_x = ball_x_orig / preprocessed.original_size[0]  # width
-        rel_y = ball_y_orig / preprocessed.original_size[1]  # height
-
-        # Clamp to valid range
-        rel_x = max(0.0, min(1.0, rel_x))
-        rel_y = max(0.0, min(1.0, rel_y))
-
-        # Only add annotation if the predicted position is within the patch bounds
-        # This helps filter out patches without balls
-        if 0 <= ball_x_orig <= orig_size_x and 0 <= ball_y_orig <= orig_size_y:
-            # Define ellipse size (relative to image size)
-            ellipse_width = ball_d_orig / preprocessed.original_size[0]
-            ellipse_height = ball_d_orig / preprocessed.original_size[1]
-
-            # Create ellipse shape centered at predicted position
-            center = Point(x=rel_x, y=rel_y)
-            shape = EllipseShape(center=center, width=ellipse_width, height=ellipse_height)
-
-            # Create annotation with confidence-based coloring
-            # Use different colors for patches to help debugging if needed
-            annotation = Annotation(
-                shape=shape,
-                text=f"ball_p[{i // 4}:{i % 4}]",  # Include patch index for debugging
-                accuracy=None,  # This model doesn't provide confidence scores
-                color="#FF4500",  # Orange color for ball
-                outline_color="#FFFFFF",  # White outline
-            )
-
-            annotations.append(annotation)
-
-    return annotations
+    return annotation
 
 
 def adapter(image_paths: list[str]) -> list[VisualizationResult]:
@@ -236,16 +146,20 @@ def adapter(image_paths: list[str]) -> list[VisualizationResult]:
         try:
             _logger.debug("Processing image: %s", image_path)
 
-            # Preprocess image into patches
-            preprocessed = _preprocess_image(image_path)
-            patch_batch = preprocessed.patch_batch.to(device)
+            # Preprocess image
+            yuv_image, original_size = _preprocess_image(image_path)
+            yuv_image = yuv_image.to(device)
 
-            # Run inference on all patches
-            with torch.no_grad():
-                predictions = model(patch_batch)
+            # Run ball hypothesis model
+            hypotheses = run_ball_hyp_model(model, yuv_image)
 
-            # Postprocess predictions to annotations
-            annotations = _postprocess_predictions(predictions, preprocessed)
+            # Convert hypotheses to annotations
+            annotations = []
+            for hyp in hypotheses:
+                # Filter out hypotheses that are outside the image bounds
+                if 0 <= hyp.center_x <= original_size[0] and 0 <= hyp.center_y <= original_size[1] and hyp.diameter > 0:
+                    annotation = _convert_hypothesis_to_annotation(hyp, original_size)
+                    annotations.append(annotation)
 
             result = VisualizationResult(
                 image_path=Path(image_path).resolve(), annotations=annotations, result_image=None
