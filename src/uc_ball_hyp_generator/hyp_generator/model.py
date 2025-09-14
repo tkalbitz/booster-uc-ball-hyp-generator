@@ -167,4 +167,4 @@ class NetworkV2HypercolumnDouble(nn.Module):
 
 
 def get_ball_hyp_model(input_height: int, input_width: int) -> nn.Module:
-    return NetworkV2(input_height=input_height, input_width=input_width, num_classes=3)
+    return NetworkV2HypercolumnDouble(input_height=input_height, input_width=input_width, num_classes=3)
