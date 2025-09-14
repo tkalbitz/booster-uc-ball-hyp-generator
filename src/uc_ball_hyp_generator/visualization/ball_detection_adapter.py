@@ -6,7 +6,6 @@ with ball detection annotations using EllipseShape.
 """
 
 import logging
-import os
 from pathlib import Path
 
 import kornia
@@ -15,6 +14,7 @@ import torchvision.transforms.v2 as transforms_v2  # type: ignore[import-untyped
 from naoteamhtwk_machinelearning_visualizer.core.shapes import Annotation, EllipseShape, Point, VisualizationResult
 from torchvision.io import ImageReadMode, decode_image  # type: ignore[import-untyped]
 
+from uc_ball_hyp_generator.classifier.utils import load_ball_classifier_model, run_ball_classifier_model
 from uc_ball_hyp_generator.hyp_generator.config import (
     img_scaled_height,
     img_scaled_width,
@@ -25,44 +25,17 @@ from uc_ball_hyp_generator.hyp_generator.utils import BallHypothesis, load_ball_
 
 _logger = logging.getLogger(__name__)
 
+CLASSIFIER_AVAILABLE = True
+
 # Global model instance to avoid reloading
-_model: torch.nn.Module | None = None
 _device: torch.device | None = None
-_model_path: str | None = None
+_hyp_model: torch.nn.Module | None = None
+_hyp_model_path: Path | None = None
+_classifier_model_path: Path | None = None
+_classifier_model: torch.nn.Module | None = None
 
 
-def _get_model_path() -> str:
-    """Get the model path from environment variable or use default."""
-    model_path = os.environ.get("BALL_MODEL_PATH")
-    if model_path is None:
-        msg = "BALL_MODEL_PATH environment variable must be set to the .pth model file"
-        raise RuntimeError(msg)
-
-    if not Path(model_path).exists():
-        msg = f"Model file not found: {model_path}"
-        raise FileNotFoundError(msg)
-
-    return model_path
-
-
-def _load_model() -> tuple[torch.nn.Module, torch.device]:
-    """Load the ball detection model."""
-    global _model, _device, _model_path
-
-    current_model_path = _get_model_path()
-
-    if _model is None or _model_path != current_model_path:
-        _device = torch.device("cpu")
-        if torch.cuda.is_available():
-            _device = torch.device("cuda")
-
-        _model = load_ball_hyp_model(Path(current_model_path), _device)
-        _model_path = current_model_path
-
-    return _model, _device
-
-
-def _preprocess_image(image_path: str) -> tuple[torch.Tensor, tuple[int, int]]:
+def _preprocess_image(image_path: str) -> tuple[torch.Tensor, torch.Tensor, tuple[int, int]]:
     """Load and preprocess image for model inference."""
     # Load image using torchvision.io.decode_image
     image_tensor = decode_image(image_path, mode=ImageReadMode.RGB)
@@ -71,23 +44,21 @@ def _preprocess_image(image_path: str) -> tuple[torch.Tensor, tuple[int, int]]:
     original_height, original_width = image_tensor.shape[1], image_tensor.shape[2]
     original_size = (original_width, original_height)  # (width, height)
 
-    # Convert from uint8 [0, 255] to float32 [0, 1] and resize
-    transform = transforms_v2.Compose(
-        [
-            transforms_v2.ToDtype(torch.float32, scale=True),
-            transforms_v2.Resize((img_scaled_height, img_scaled_width), antialias=True),
-        ]
-    )
+    # Convert from uint8 [0, 255] to float32 [0, 1]
+    image_tensor_float = transforms_v2.ToDtype(torch.float32, scale=True)(image_tensor)
 
-    processed_image = transform(image_tensor)  # (C, H, W) in RGB [0,1]
+    # Create scaled image
+    scaled_image = transforms_v2.Resize((img_scaled_height, img_scaled_width), antialias=True)(image_tensor_float)
 
-    # Convert RGB to YUV using Kornia
-    yuv_image = kornia.color.rgb_to_yuv(processed_image.unsqueeze(0)).squeeze(0)  # (C, H, W) in YUV
+    # Convert scaled image to YUV using Kornia
+    scaled_yuv = kornia.color.rgb_to_yuv(scaled_image.unsqueeze(0)).squeeze(0)  # (C, H, W) in YUV
 
-    return yuv_image, original_size
+    return image_tensor_float, scaled_yuv, original_size
 
 
-def _convert_hypothesis_to_annotation(hyp: BallHypothesis, original_size: tuple[int, int]) -> Annotation:
+def _convert_hypothesis_to_annotation(
+    hyp: BallHypothesis, original_size: tuple[int, int], prob: float | None = None
+) -> Annotation:
     """Convert ball hypothesis to visualization annotation."""
     orig_size_x, orig_size_y = original_size
 
@@ -107,12 +78,22 @@ def _convert_hypothesis_to_annotation(hyp: BallHypothesis, original_size: tuple[
     center = Point(x=rel_x, y=rel_y)
     shape = EllipseShape(center=center, width=ellipse_width, height=ellipse_height)
 
+    # Set color based on classifier probability if available
+    if prob is not None:
+        # Interpolate between red (0) and green (1)
+        red = int(255 * (1 - prob))
+        green = int(255 * prob)
+        blue = 0
+        color = f"#{red:02x}{green:02x}{blue:02x}"
+    else:
+        color = "#FF4500"  # Orange color for ball
+
     # Create annotation
     annotation = Annotation(
         shape=shape,
         text="ball",
-        accuracy=None,
-        color="#FF4500",  # Orange color for ball
+        accuracy=prob,
+        color=color,
         outline_color="#FFFFFF",  # White outline
     )
 
@@ -128,37 +109,51 @@ def adapter(image_paths: list[str]) -> list[VisualizationResult]:
     Returns:
         List of VisualizationResult objects with ball detection annotations
     """
+    global _hyp_model, _hyp_model_path, _classifier_model, _classifier_model_path
     _logger.info("Processing %d images with patch-based ball detection model", len(image_paths))
 
-    try:
-        model, device = _load_model()
-    except Exception as e:
-        _logger.error("Failed to load model: %s", e)
-        # Return empty results for all images
-        return [
-            VisualizationResult(image_path=Path(path).resolve(), annotations=[], result_image=None)
-            for path in image_paths
-        ]
+    cur_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+    if not _hyp_model and _hyp_model_path:
+        _hyp_model = load_ball_hyp_model(_hyp_model_path, cur_device)
+        _logger.info("Loaded hypothesis model from: %s", _hyp_model_path)
+
+        if _classifier_model_path:
+            _classifier_model = load_ball_classifier_model(_classifier_model_path, cur_device)
+            _logger.info("Loaded classifier model from: %s", _classifier_model_path)
 
     results: list[VisualizationResult] = []
 
+    if not _hyp_model:
+        _logger.warning("Hypothesis model not loaded. Skipping image processing.")
+        return results
+
     for image_path in image_paths:
         try:
-            _logger.debug("Processing image: %s", image_path)
+            _logger.info("Processing image: %s", image_path)
 
             # Preprocess image
-            yuv_image, original_size = _preprocess_image(image_path)
-            yuv_image = yuv_image.to(device)
+            original_image, yuv_image, original_size = _preprocess_image(image_path)
+            yuv_image = yuv_image.to(cur_device)
 
             # Run ball hypothesis model
-            hypotheses = run_ball_hyp_model(model, yuv_image)
+            hypotheses = run_ball_hyp_model(_hyp_model, yuv_image)
+
+            # Run classifier if enabled
+            probs = None
+            if _classifier_model and hypotheses:
+                # Convert original image to YUV for classifier
+                original_image_yuv = kornia.color.rgb_to_yuv(original_image.unsqueeze(0)).squeeze(0).to(cur_device)
+                probs = run_ball_classifier_model(_classifier_model, original_image_yuv, hypotheses)
 
             # Convert hypotheses to annotations
             annotations = []
-            for hyp in hypotheses:
+            for idx, hyp in enumerate(hypotheses):
                 # Filter out hypotheses that are outside the image bounds
                 if 0 <= hyp.center_x <= original_size[0] and 0 <= hyp.center_y <= original_size[1] and hyp.diameter > 0:
-                    annotation = _convert_hypothesis_to_annotation(hyp, original_size)
+                    # Get probability if available
+                    prob = probs[idx] if probs is not None else None
+                    annotation = _convert_hypothesis_to_annotation(hyp, original_size, prob)
                     annotations.append(annotation)
 
             result = VisualizationResult(
