@@ -15,6 +15,7 @@ from uc_ball_hyp_generator.hyp_generator.config import (
 )
 from uc_ball_hyp_generator.hyp_generator.model import get_ball_hyp_model
 from uc_ball_hyp_generator.hyp_generator.scale_patch import unscale_patch_x, unscale_patch_y, unscale_radius
+from uc_ball_hyp_generator.utils.common_model_operations import load_model_with_clean_state_dict
 from uc_ball_hyp_generator.utils.logger import get_logger
 
 _logger = get_logger(__name__)
@@ -127,25 +128,7 @@ def load_ball_hyp_model(model_weights_path: Path, device: device) -> torch.nn.Mo
 
     model = get_ball_hyp_model(patch_height, patch_width)
 
-    # Load state dict and handle torch.compile prefixes
-    state_dict = torch.load(current_model_path, map_location=device)
-
-    # Check if this is a compiled model (has _orig_mod. prefixes)
-    if any(key.startswith("_orig_mod.") for key in state_dict.keys()):
-        _logger.info("Detected compiled model, removing _orig_mod. prefixes")
-        # Remove _orig_mod. prefixes from compiled model
-        cleaned_state_dict = {}
-        for key, value in state_dict.items():
-            if key.startswith("_orig_mod."):
-                cleaned_key = key[len("_orig_mod.") :]
-                cleaned_state_dict[cleaned_key] = value
-            else:
-                cleaned_state_dict[key] = value
-        state_dict = cleaned_state_dict
-
-    model.load_state_dict(state_dict)
-    model.to(device)
-    model.eval()
+    model = load_model_with_clean_state_dict(model, current_model_path, device)
 
     _logger.info("Model loaded successfully on device: %s", device)
 
@@ -163,19 +146,20 @@ def run_ball_hyp_model(model: torch.nn.Module, scaled_yuv_image: Tensor) -> list
         List of BallHypothesis objects with center coordinates and diameter in original image coordinates
     """
     img_height, img_width = scaled_yuv_image.shape[1], scaled_yuv_image.shape[2]
-    
+
     # Calculate number of patches dynamically based on image dimensions
     n_patches_w = (img_width + patch_width - 1) // patch_width
     n_patches_h = (img_height + patch_height - 1) // patch_height
     total_patches = n_patches_w * n_patches_h
-    
+
     # Pre-allocate batch tensor
-    batch = torch.zeros((total_patches, 3, patch_height, patch_width), 
-                       device=scaled_yuv_image.device, dtype=scaled_yuv_image.dtype)
-    
+    batch = torch.zeros(
+        (total_patches, 3, patch_height, patch_width), device=scaled_yuv_image.device, dtype=scaled_yuv_image.dtype
+    )
+
     patch_positions = []
     patch_idx = 0
-    
+
     # Collect all patches and their positions
     for i in range(n_patches_w):
         for j in range(n_patches_h):
@@ -207,9 +191,7 @@ def run_ball_hyp_model(model: torch.nn.Module, scaled_yuv_image: Tensor) -> list
     # Process all outputs
     hypotheses = []
     for idx, output in enumerate(outputs):
-        center_x, center_y, diameter = transform_hyp_output_to_original_coords(
-            output, patch_positions[idx]
-        )
+        center_x, center_y, diameter = transform_hyp_output_to_original_coords(output, patch_positions[idx])
         hypotheses.append(BallHypothesis(center_x=center_x, center_y=center_y, diameter=diameter))
 
     return hypotheses

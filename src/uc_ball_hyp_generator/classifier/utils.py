@@ -1,5 +1,6 @@
 """Utility functions for ball classifier."""
 
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import torch
@@ -12,6 +13,8 @@ else:
     BallHypothesis = object
 
 from uc_ball_hyp_generator.classifier.config import CLASSIFIER_DILATION_FACTOR, CPATCH_SIZE
+from uc_ball_hyp_generator.classifier.model import get_ball_classifier_model
+from uc_ball_hyp_generator.utils.common_model_operations import load_model_with_clean_state_dict
 
 
 def run_ball_classifier_model(
@@ -88,3 +91,18 @@ def run_ball_classifier_model(
     probabilities = outputs.squeeze(1).cpu().tolist()
 
     return probabilities
+
+
+def load_ball_classifier_model(model_weights_path: Path, device: torch.device) -> torch.nn.Module:
+    """Load the ball classifier model.
+
+    Args:
+        model_weights_path: Path to the model weights file
+        device: Device to load the model on
+
+    Returns:
+        Loaded ball classifier model
+    """
+    model = get_ball_classifier_model()
+    model = load_model_with_clean_state_dict(model, model_weights_path, device)
+    return model
