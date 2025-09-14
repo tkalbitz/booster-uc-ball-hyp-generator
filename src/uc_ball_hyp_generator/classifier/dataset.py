@@ -12,7 +12,7 @@ from torch.nn import Module
 from torch.utils.data import Dataset
 from torchvision.io import ImageReadMode, decode_image, write_jpeg  # type: ignore[import-untyped]
 
-from uc_ball_hyp_generator.classifier.config import CPATCH_SIZE
+from uc_ball_hyp_generator.classifier.config import CLASSIFIER_DILATION_FACTOR, CPATCH_SIZE
 from uc_ball_hyp_generator.hyp_generator.ball_hypothesis_image_scaler import BallHypothesisImageScaler
 from uc_ball_hyp_generator.hyp_generator.config import scale_factor
 from uc_ball_hyp_generator.hyp_generator.utils import create_random_hpatch, transform_hyp_output_to_original_coords
@@ -184,7 +184,7 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
     def _extract_cpatch(self, original_image: Tensor, center_x: float, center_y: float, diameter: float) -> Tensor:
         """Extract and process cpatch from original image."""
         # Calculate crop size with 1.2x diameter
-        crop_size = max(1, int(diameter * 1.2))
+        crop_size = max(1, int(diameter * CLASSIFIER_DILATION_FACTOR))
         half_crop = crop_size // 2
 
         # Calculate crop bounds

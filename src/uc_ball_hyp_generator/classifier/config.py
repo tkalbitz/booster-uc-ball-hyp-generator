@@ -8,3 +8,6 @@ TRAIN_BATCH_SIZE: int = 512
 
 VAL_BATCH_SIZE: int = 1024
 """Batch size for validation."""
+
+CLASSIFIER_DILATION_FACTOR: float = 1.2
+"""Factor to dilate the ball diameter for classifier patch extraction."""
