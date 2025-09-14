@@ -54,9 +54,7 @@ def main() -> None:
             output_path=None,  # Interactive mode (no output path = GUI mode)
             adapter_function=None,  # Will be loaded from config
             config_path=None,
-            config_overrides={
-                "adapter": {"function": "uc_ball_hyp_generator.hyp_generator.visualization.ball_detection_adapter"}
-            },
+            config_overrides={"adapter": {"function": "uc_ball_hyp_generator.visualization.ball_detection_adapter"}},
         )
 
         if result.success:

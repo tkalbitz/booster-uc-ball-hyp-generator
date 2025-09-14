@@ -8,6 +8,7 @@
         "editor.defaultFormatter": "charliermarsh.ruff"
     },
     "editor.rulers": [
+        80,
         120
     ],
     "python.testing.pytestArgs": [
