@@ -31,13 +31,13 @@ class BallClassifier(nn.Module):
             nn.BatchNorm2d(3),
             Conv2dBn(3, 8, kernel_size=3, padding="same", activation="relu"),
             BigLittleReduction(8, 10, "relu"),  # Output channels: 15
-            nn.Dropout(0.2),
+            nn.Dropout(0.3),
             BigLittleReduction(15, 12, "relu"),  # Output channels: 18
             SEBlock(18),
-            nn.Dropout(0.1),
+            nn.Dropout(0.2),
             BigLittleReduction(18, 12, "relu"),  # Output channels: 18
             SEBlock(18),
-            nn.Dropout(0.1),
+            nn.Dropout(0.2),
             BigLittleReduction(18, 14, "relu"),  # Output channels: 21
             SEBlock(21),
             nn.Dropout(0.1),

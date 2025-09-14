@@ -149,7 +149,7 @@ def main() -> None:
 
     parser = argparse.ArgumentParser(description="Train ball classifier")
     parser.add_argument("--weights", type=str, required=True, help="Path to hyp_model weights file")
-    parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs")
+    parser.add_argument("--epochs", type=int, default=500, help="Number of training epochs")
     parser.add_argument("--learning-rate", type=float, default=1e-3, help="Learning rate")
     parser.add_argument("--output", type=str, default=default_output_dir, help="Output directory for model files")
 
@@ -232,7 +232,7 @@ def main() -> None:
             best_accuracy = val_accuracy
 
             # Save model with accuracy-first filename format
-            acc_first_filename = f"model.acc-{val_accuracy:.6f}-{val_loss:.6f}.pth"
+            acc_first_filename = f"model.acc-{epoch + 1:03d}-{val_accuracy:.6f}-{val_loss:.6f}.pth"
             acc_first_path = output_dir / acc_first_filename
             torch.save(classifier.state_dict(), acc_first_path)
 
@@ -242,7 +242,7 @@ def main() -> None:
             best_val_loss = val_loss
 
             # Save model with loss-first filename format
-            loss_first_filename = f"model.loss-{val_loss:.6f}-{val_accuracy:.6f}.pth"
+            loss_first_filename = f"model.loss-{epoch + 1:03d}-{val_loss:.6f}-{val_accuracy:.6f}.pth"
             loss_first_path = output_dir / loss_first_filename
             torch.save(classifier.state_dict(), loss_first_path)
 
