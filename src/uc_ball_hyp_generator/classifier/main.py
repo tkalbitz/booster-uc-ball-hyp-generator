@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 from uc_ball_hyp_generator.classifier.config import CPATCH_SIZE, TRAIN_BATCH_SIZE, VAL_BATCH_SIZE
 from uc_ball_hyp_generator.classifier.dataset import BallClassifierDataset
-from uc_ball_hyp_generator.classifier.model import BallClassifierHypercolumn
+from uc_ball_hyp_generator.classifier.model import BallClassifierHypercolumn, get_ball_classifier_model
 from uc_ball_hyp_generator.hyp_generator.config import (
     image_dir,
     testset_csv_collection,
@@ -197,7 +197,7 @@ def main() -> None:
         _logger.warning("Could not calculate FLOPs: %s", e)
 
     # Create classifier model
-    classifier = BallClassifierHypercolumn().to(device)
+    classifier: torch.nn.Module = get_ball_classifier_model().to(device)
 
     # Setup training components
     optimizer = AdamW(classifier.parameters(), lr=args.learning_rate, weight_decay=1e-4)

@@ -161,3 +161,7 @@ class BallClassifierHypercolumn(nn.Module):
 
         # Pass the rich hypercolumn vector to the classifier
         return self.hypercolumn_classifier(hypercolumn)
+
+
+def get_ball_classifier_model() -> torch.nn.Module:
+    return BallClassifierHypercolumn()
