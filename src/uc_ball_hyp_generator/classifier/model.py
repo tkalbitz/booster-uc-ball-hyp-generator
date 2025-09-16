@@ -24,9 +24,6 @@ class BallClassifier(nn.Module):
         """
         super().__init__()
 
-        # Feature extractor using a sequence of custom layers.
-        # This structure follows modern best practices by encapsulating
-        # the feature extraction logic in a single sequential module.
         self.features = nn.Sequential(
             nn.BatchNorm2d(3),
             Conv2dBn(3, 8, kernel_size=3, padding="same", activation="relu"),
@@ -43,17 +40,16 @@ class BallClassifier(nn.Module):
             nn.Dropout(0.1),
         )
 
-        # To make the model robust to input_size changes, we dynamically
-        # calculate the number of flattened features after the feature extractor.
-        with torch.no_grad():
-            dummy_input = torch.zeros(1, 3, input_size, input_size)
-            output_shape = self.features(dummy_input).shape
-            flattened_features = output_shape[1] * output_shape[2] * output_shape[3]
+        # The final number of channels from the feature extractor is 21.
+        final_channels = 21
 
-        # Classifier head for binary classification.
         self.classifier = nn.Sequential(
+            # This layer will pool each channel to a single 1x1 value.
+            # Input: (B, 21, H, W) -> Output: (B, 21, 1, 1)
+            nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-            nn.Linear(flattened_features, 32),
+            # The input to the linear layer is now always `final_channels`.
+            nn.Linear(final_channels, 32),
             nn.ReLU(),
             nn.Linear(32, 1),
             nn.Sigmoid(),
