@@ -73,11 +73,11 @@ def run_ball_classifier_model(
         end_y = start_y + desired_patch_size
 
         # Extract patch from image
-        patch = yuv_image[:, start_y:end_y, start_x:end_x]
+        patch: Tensor = yuv_image[:, start_y:end_y, start_x:end_x]
 
         # Resize patch to CPATCH_SIZE using interpolation
         if patch.shape[1] != CPATCH_SIZE or patch.shape[2] != CPATCH_SIZE:
-            patch: Tensor = F.interpolate(
+            patch = F.interpolate(
                 patch.unsqueeze(0), size=(CPATCH_SIZE, CPATCH_SIZE), mode="bilinear", align_corners=False
             ).squeeze(0)
 

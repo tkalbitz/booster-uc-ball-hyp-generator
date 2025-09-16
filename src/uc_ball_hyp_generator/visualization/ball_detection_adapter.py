@@ -20,6 +20,7 @@ from uc_ball_hyp_generator.hyp_generator.config import (
     img_scaled_width,
     patch_height,
     patch_width,
+    scale_factor,
 )
 from uc_ball_hyp_generator.hyp_generator.utils import BallHypothesis, load_ball_hyp_model, run_ball_hyp_model
 
@@ -47,8 +48,13 @@ def _preprocess_image(image_path: str) -> tuple[torch.Tensor, torch.Tensor, tupl
     # Convert from uint8 [0, 255] to float32 [0, 1]
     image_tensor_float = transforms_v2.ToDtype(torch.float32, scale=True)(image_tensor)
 
+    calc_img_scaled_height = original_height // scale_factor
+    calc_img_scaled_width = original_width // scale_factor
+
     # Create scaled image
-    scaled_image = transforms_v2.Resize((img_scaled_height, img_scaled_width), antialias=True)(image_tensor_float)
+    scaled_image = transforms_v2.Resize((calc_img_scaled_height, calc_img_scaled_width), antialias=True)(
+        image_tensor_float
+    )
 
     # Convert scaled image to YUV using Kornia
     scaled_yuv = kornia.color.rgb_to_yuv(scaled_image.unsqueeze(0)).squeeze(0)  # (C, H, W) in YUV
