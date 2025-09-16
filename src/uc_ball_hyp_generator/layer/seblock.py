@@ -21,5 +21,5 @@ class SEBlock(nn.Module):
         x = self.fc2(x)
         x = torch.sigmoid(x)
         # This reshape is necessary to broadcast the channel multipliers back to the input tensor shape
-        x = x.view(x.size(0), x.size(1), 1, 1)
+        x = x.unsqueeze(-1).unsqueeze(-1)
         return input_tensor * x
