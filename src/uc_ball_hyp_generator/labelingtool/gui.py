@@ -1,37 +1,39 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Sequence, Callable, cast
-import numpy as np
+from typing import Callable, Sequence, cast
 
-from PySide6.QtCore import Qt, QPoint, QPointF, QRectF, Signal, QThread
-from PySide6.QtGui import QAction, QPixmap, QPen, QColor, QPainter, QImage
+import numpy as np
+from PySide6.QtCore import QPoint, QPointF, QRectF, Qt, QThread, Signal
+from PySide6.QtGui import QAction, QColor, QImage, QPainter, QPen, QPixmap
 from PySide6.QtWidgets import (
-    QGraphicsPixmapItem,
-    QGraphicsScene,
-    QGraphicsView,
-    QGraphicsRectItem,
+    QComboBox,
     QGraphicsEllipseItem,
     QGraphicsItem,
     QGraphicsLineItem,
+    QGraphicsPixmapItem,
+    QGraphicsRectItem,
+    QGraphicsScene,
+    QGraphicsView,
     QMainWindow,
     QMenu,
     QMenuBar,
-    QStatusBar,
     QProgressBar,
-    QComboBox,
+    QStatusBar,
     QWidget,
 )
 
-from uc_ball_hyp_generator.labelingtool.utils.logger import get_logger
-from uc_ball_hyp_generator.labelingtool.model import BoundingBox, Shape
 from uc_ball_hyp_generator.labelingtool.config import get_shape_for_class, load_config
-from uc_ball_hyp_generator.labelingtool.sam import SamWorker, SamManager
+from uc_ball_hyp_generator.labelingtool.model import BoundingBox, Shape
 from uc_ball_hyp_generator.labelingtool.persistence import (
-    save_labels as persist_save_labels,
     load_existing_labels,
     load_noball_images,
 )
+from uc_ball_hyp_generator.labelingtool.persistence import (
+    save_labels as persist_save_labels,
+)
+from uc_ball_hyp_generator.labelingtool.sam import SamManager, SamWorker
+from uc_ball_hyp_generator.labelingtool.utils.logger import get_logger
 
 _logger = get_logger("uc_ball_hyp_generator.labelingtool.gui")
 
@@ -326,16 +328,52 @@ class RubberbandItem(QGraphicsRectItem):
         self.update()
 
     def paint(self, painter: QPainter, option, widget: QWidget | None = None) -> None:
-        painter.setPen(self.pen())
         rect = self.rect()
+
+        # Create white pen for outline
+        white_pen = QPen(QColor("white"))
+        white_pen.setCosmetic(True)
+        white_pen.setWidth(1)
+
+        # Get the main pen for the shape
+        main_pen = self.pen()
+
         if self._shape == Shape.RECTANGLE:
+            # Draw outer white outline (1px outside)
+            painter.setPen(white_pen)
+            inner_rect = rect.adjusted(1.0, 1.0, -1.0, -1.0)
+            outer_rect = rect.adjusted(-1.0, -1.0, 1.0, 1.0)
+            painter.drawRect(inner_rect)
+            painter.drawRect(outer_rect)
+
+            # Draw main shape
+            painter.setPen(main_pen)
             painter.drawRect(rect)
         else:
             if self._shape == Shape.CIRCLE:
                 diameter = min(rect.width(), rect.height())
                 square = QRectF(rect.center().x() - diameter / 2, rect.center().y() - diameter / 2, diameter, diameter)
+
+                # Draw outer white outline (1px outside)
+                painter.setPen(white_pen)
+                inner_square = square.adjusted(1.0, 1.0, -1.0, -1.0)
+                outer_square = square.adjusted(-1.0, -1.0, 1.0, 1.0)
+                painter.drawEllipse(inner_square)
+                painter.drawEllipse(outer_square)
+
+                # Draw main shape
+                painter.setPen(main_pen)
                 painter.drawEllipse(square)
             else:  # ELLIPSE
+                # Draw outer white outline (1px outside)
+                painter.setPen(white_pen)
+                inner_rect = rect.adjusted(1.0, 1.0, -1.0, -1.0)
+                outer_rect = rect.adjusted(-1.0, -1.0, 1.0, 1.0)
+                painter.drawEllipse(inner_rect)
+                painter.drawEllipse(outer_rect)
+
+                # Draw main shape
+                painter.setPen(main_pen)
                 painter.drawEllipse(rect)
 
 
@@ -732,7 +770,7 @@ class ImageCanvas(QGraphicsView):
             shape = self._shape_provider()
             class_name = self._class_provider()
             pen = self._pen_for_class(class_name)
-            pen.setStyle(Qt.PenStyle.DashLine)
+            pen.setStyle(Qt.PenStyle.SolidLine)
             if self._rubberband_item is None:
                 self._rubberband_item = RubberbandItem(
                     QRectF(self._drag_start, self._drag_start), shape, class_name, pen
