@@ -1,13 +1,17 @@
 """Linear scaling utilities for numerical values and tensors."""
 
-from typing import TypeVar
+from typing import overload
 
 import torch
 
-T = TypeVar("T", float, torch.Tensor)
 
-
-def scale[T](x: T, from_min: float, from_max: float, to_min: float, to_max: float) -> T:
+@overload
+def scale(x: float, from_min: float, from_max: float, to_min: float, to_max: float) -> float: ...
+@overload
+def scale(x: torch.Tensor, from_min: float, from_max: float, to_min: float, to_max: float) -> torch.Tensor: ...
+def scale(
+    x: float | torch.Tensor, from_min: float, from_max: float, to_min: float, to_max: float
+) -> float | torch.Tensor:
     """Scale a value from one range to another using linear interpolation.
 
     Transforms values from the range [from_min, from_max] to [to_min, to_max].
@@ -30,4 +34,7 @@ def scale[T](x: T, from_min: float, from_max: float, to_min: float, to_max: floa
         >>> scale(torch.tensor([2.0, 4.0]), 0.0, 10.0, -1.0, 1.0)  # Scale to [-1,1]
         tensor([-0.6, -0.2])
     """
-    return ((to_max - to_min) * (x - from_min)) / (from_max - from_min) + to_min
+    if isinstance(x, torch.Tensor):
+        return ((to_max - to_min) * (x - from_min)) / (from_max - from_min) + to_min
+    else:
+        return ((to_max - to_min) * (float(x) - from_min)) / (from_max - from_min) + to_min
