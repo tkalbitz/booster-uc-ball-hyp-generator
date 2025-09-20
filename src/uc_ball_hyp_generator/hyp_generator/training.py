@@ -6,6 +6,18 @@ from dataclasses import dataclass
 
 import torch
 
+# AMP GradScaler shared across epochs (float16 only)
+_scaler: torch.cuda.amp.GradScaler | None = None
+
+
+def _amp_dtype_for_device(device: torch.device) -> torch.dtype | None:
+    if device.type != "cuda":
+        return None
+    try:
+        return torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
+    except Exception:
+        return torch.float16
+
 from uc_ball_hyp_generator.hyp_generator.patch_found_ball_metric import PatchBallRadiusMetric, PatchFoundBallMetric
 from uc_ball_hyp_generator.utils.early_stopping_on_lr import EarlyStoppingOnLR
 from uc_ball_hyp_generator.utils.logger import get_logger
@@ -50,13 +62,41 @@ def train_epoch(
     train_metric_radius.reset_states()
 
     for batch_idx, (data, target) in enumerate(train_loader):
-        data, target = data.to(device), target.to(device)
+        # Move to device and adopt channels_last on CUDA
+        if device.type == "cuda":
+            data = data.to(device, non_blocking=True).to(memory_format=torch.channels_last)
+            target = target.to(device, non_blocking=True)
+        else:
+            data = data.to(device)
+            target = target.to(device)
 
-        optimizer.zero_grad()
-        output = model(data)
-        loss = criterion(output, target)
-        loss.backward()
-        optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
+
+        amp_dtype = _amp_dtype_for_device(device)
+        if amp_dtype is None:
+            output = model(data)
+            loss = criterion(output, target)
+            loss.backward()
+            optimizer.step()
+        else:
+            if amp_dtype is torch.float16:
+                # Use GradScaler for float16
+                global _scaler
+                if _scaler is None:
+                    _scaler = torch.cuda.amp.GradScaler()
+                with torch.autocast(device_type="cuda", dtype=amp_dtype):
+                    output = model(data)
+                    loss = criterion(output, target)
+                _scaler.scale(loss).backward()
+                _scaler.step(optimizer)
+                _scaler.update()
+            else:
+                # bfloat16 path (no scaler)
+                with torch.autocast(device_type="cuda", dtype=amp_dtype):
+                    output = model(data)
+                    loss = criterion(output, target)
+                loss.backward()
+                optimizer.step()
 
         train_loss += loss.item()
         train_acc += calculate_accuracy(output, target).item()
@@ -91,10 +131,21 @@ def validate_epoch(
 
     with torch.no_grad():
         for batch_idx, (data, target) in enumerate(test_loader):
-            data, target = data.to(device), target.to(device)
+            if device.type == "cuda":
+                data = data.to(device, non_blocking=True).to(memory_format=torch.channels_last)
+                target = target.to(device, non_blocking=True)
+            else:
+                data = data.to(device)
+                target = target.to(device)
 
-            output = model(data)
-            loss = criterion(output, target)
+            amp_dtype = _amp_dtype_for_device(device)
+            if amp_dtype is None:
+                output = model(data)
+                loss = criterion(output, target)
+            else:
+                with torch.autocast(device_type="cuda", dtype=amp_dtype):
+                    output = model(data)
+                    loss = criterion(output, target)
 
             val_loss += loss.item()
             val_acc += calculate_accuracy(output, target).item()

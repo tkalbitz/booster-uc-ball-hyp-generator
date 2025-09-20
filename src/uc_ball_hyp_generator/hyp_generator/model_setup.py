@@ -84,7 +84,7 @@ def create_model(compile_model: bool = True) -> tuple[torch.nn.Module, str, str]
         _logger.warning("Could not calculate FLOPs: %s", e)
 
     model = get_ball_hyp_model(patch_height, patch_width)
-    model = model.to(device)
+    model = model.to(device, memory_format=torch.channels_last)
 
     # Apply PyTorch 2.0 compilation for better performance
     if compile_model and hasattr(torch, "compile"):

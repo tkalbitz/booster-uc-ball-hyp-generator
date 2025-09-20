@@ -22,10 +22,10 @@ def main() -> None:
     torch.manual_seed(1)
     np.random.seed(1)
 
-    device: torch.device = torch.device("cpu")
-    if torch.cuda.is_available():
+    device: torch.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device.type == "cuda":
         torch.set_float32_matmul_precision("high")
-        device = torch.device("cuda")
+        torch.backends.cudnn.benchmark = True
 
     _logger.info("Using device: %s", device)
 
