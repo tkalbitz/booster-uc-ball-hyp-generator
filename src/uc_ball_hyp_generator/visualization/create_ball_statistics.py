@@ -33,10 +33,7 @@ from uc_ball_hyp_generator.classifier.utils import (
     load_ball_classifier_model,
     run_ball_classifier_model,
 )
-from uc_ball_hyp_generator.hyp_generator.config import (
-    img_scaled_height,
-    img_scaled_width,
-)
+from uc_ball_hyp_generator.hyp_generator.config import scale_factor
 from uc_ball_hyp_generator.hyp_generator.utils import (
     BallHypothesis,
     load_ball_hyp_model,
@@ -58,7 +55,10 @@ def _preprocess_image(image_path: Path) -> tuple[torch.Tensor, torch.Tensor, tup
 
     img_float = transforms_v2.ToDtype(torch.float32, scale=True)(img_tensor)
 
-    scaled = transforms_v2.Resize((img_scaled_height, img_scaled_width), antialias=True)(img_float)
+    # Calculate scaled dimensions based on scale factor
+    scaled_width = original_w // scale_factor
+    scaled_height = original_h // scale_factor
+    scaled = transforms_v2.Resize((scaled_height, scaled_width), antialias=True)(img_float)
 
     original_yuv = kornia.color.rgb_to_yuv(img_float.unsqueeze(0)).squeeze(0)
     scaled_yuv = kornia.color.rgb_to_yuv(scaled.unsqueeze(0)).squeeze(0)

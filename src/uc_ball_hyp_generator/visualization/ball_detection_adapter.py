@@ -16,8 +16,6 @@ from torchvision.io import ImageReadMode, decode_image  # type: ignore[import-un
 
 from uc_ball_hyp_generator.classifier.utils import load_ball_classifier_model, run_ball_classifier_model
 from uc_ball_hyp_generator.hyp_generator.config import (
-    img_scaled_height,
-    img_scaled_width,
     patch_height,
     patch_width,
     scale_factor,
@@ -194,8 +192,5 @@ def get_adapter_info() -> dict[str, str]:
         "classes": "ball",
         "requirements": "torch>=2.8.0, PIL, numpy",
         "environment": "Set BALL_MODEL_PATH to point to the .pth model file",
-        "patch_info": (
-            f"Processes images as {img_scaled_width // patch_width}x"
-            f"{img_scaled_height // patch_height} grid of {patch_width}x{patch_height} patches"
-        ),
+        "patch_info": (f"Processes images scaled by factor {scale_factor} using {patch_width}x{patch_height} patches"),
     }
