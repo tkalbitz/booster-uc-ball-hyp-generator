@@ -7,6 +7,8 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor
 
+from uc_ball_hyp_generator.utils.logger import get_logger
+
 if TYPE_CHECKING:
     from uc_ball_hyp_generator.hyp_generator.utils import BallHypothesis
 else:
@@ -15,6 +17,8 @@ else:
 from uc_ball_hyp_generator.classifier.config import CLASSIFIER_DILATION_FACTOR, CPATCH_SIZE
 from uc_ball_hyp_generator.classifier.model import get_ball_classifier_model
 from uc_ball_hyp_generator.utils.common_model_operations import load_model_with_clean_state_dict
+
+_logger = get_logger(__name__)
 
 
 def run_ball_classifier_model(
@@ -105,4 +109,7 @@ def load_ball_classifier_model(model_weights_path: Path, device: torch.device) -
     """
     model = get_ball_classifier_model()
     model = load_model_with_clean_state_dict(model, model_weights_path, device)
+    model = torch.compile(model, mode="reduce-overhead", fullgraph=True)
+    _logger.info("Classifier model compiled with torch.compile for better inference performance")
+
     return model

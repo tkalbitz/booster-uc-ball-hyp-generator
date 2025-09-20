@@ -198,6 +198,8 @@ def main() -> None:
 
     # Create classifier model
     classifier: torch.nn.Module = get_ball_classifier_model().to(device)
+    classifier = torch.compile(classifier, mode="reduce-overhead", fullgraph=True)
+    _logger.info("Classifier model compiled with torch.compile for better performance")
 
     # Setup training components
     optimizer = AdamW(classifier.parameters(), lr=args.learning_rate, weight_decay=1e-4)

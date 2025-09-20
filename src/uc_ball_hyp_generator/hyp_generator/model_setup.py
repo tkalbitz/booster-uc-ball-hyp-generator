@@ -89,8 +89,8 @@ def create_model(compile_model: bool = True) -> tuple[torch.nn.Module, str, str]
     # Apply PyTorch 2.0 compilation for better performance
     if compile_model and hasattr(torch, "compile"):
         try:
-            model = torch.compile(model, mode="default", fullgraph=False)  # type: ignore[assignment]
-            _logger.info("Model compiled with torch.compile for better performance")
+            model = torch.compile(model, mode="reduce-overhead", fullgraph=True)  # type: ignore[assignment]
+            _logger.info("Model compiled with torch.compile (reduce-overhead mode) for better performance")
         except Exception as e:
             _logger.warning("Failed to compile model: %s", e)
             _logger.warning("Continuing with uncompiled model")

@@ -127,7 +127,8 @@ def load_ball_hyp_model(model_weights_path: Path, device: device) -> torch.nn.Mo
     model = get_ball_hyp_model(patch_height, patch_width)
 
     model = load_model_with_clean_state_dict(model, current_model_path, device)
-
+    model = torch.compile(model, mode="reduce-overhead", fullgraph=True)
+    _logger.info("Model compiled with torch.compile for better inference performance")
     _logger.info("Model loaded successfully on device: %s", device)
 
     return model
