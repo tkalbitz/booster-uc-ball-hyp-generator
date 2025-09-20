@@ -1,1 +1,0 @@
-"""Utility subpackage for labelingtool."""

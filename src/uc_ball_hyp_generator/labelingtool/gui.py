@@ -23,8 +23,9 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from uc_ball_hyp_generator.labelingtool.bounding_box import BoundingBox
 from uc_ball_hyp_generator.labelingtool.config import get_shape_for_class, load_config
-from uc_ball_hyp_generator.labelingtool.model import BoundingBox, Shape
+from uc_ball_hyp_generator.labelingtool.logger import get_logger
 from uc_ball_hyp_generator.labelingtool.persistence import (
     load_existing_labels,
     load_noball_images,
@@ -33,7 +34,7 @@ from uc_ball_hyp_generator.labelingtool.persistence import (
     save_labels as persist_save_labels,
 )
 from uc_ball_hyp_generator.labelingtool.sam import SamManager, SamWorker
-from uc_ball_hyp_generator.labelingtool.utils.logger import get_logger
+from uc_ball_hyp_generator.labelingtool.shape import Shape
 
 _logger = get_logger("uc_ball_hyp_generator.labelingtool.gui")
 
