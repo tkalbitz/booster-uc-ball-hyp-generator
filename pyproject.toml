@@ -16,6 +16,7 @@ dependencies = [
     "tqdm>=4.67.1",
     "scikit-learn>=1.7.2",
     "pandas>=2.3.2",
+    "onnxscript>=0.5.1",
 ]
 
 [dependency-groups]
@@ -53,8 +54,8 @@ url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
 [tool.uv.sources]
-torch = [{ index = "pytorch-cu128" }]
-torchvision = [{ index = "pytorch-cu128" }]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]
 naoteamhtwk_machinelearning_visualizer = { git = "ssh://git@github.com/tkalbitz/naoteam-machine-learning-visualizer.git" }
 
 [tool.mypy]
