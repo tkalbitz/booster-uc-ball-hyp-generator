@@ -7,8 +7,6 @@ import torch
 from torch import Tensor, device
 
 from uc_ball_hyp_generator.hyp_generator.config import (
-    img_scaled_height,
-    img_scaled_width,
     patch_height,
     patch_width,
     scale_factor,
@@ -30,6 +28,40 @@ class BallHypothesis:
     diameter: float
 
 
+def _get_boundary_aware_patch_bounds(
+    center_x: float, center_y: float, img_width: int, img_height: int
+) -> tuple[int, int]:
+    """Calculate patch bounds ensuring patch stays within image boundaries.
+
+    If patch extends beyond image border, the outer edge aligns with the border
+    and start position is calculated backwards.
+
+    Args:
+        center_x: Target center x coordinate
+        center_y: Target center y coordinate
+        img_width: Image width
+        img_height: Image height
+
+    Returns:
+        Tuple of (start_x, start_y) for patch extraction
+    """
+    # Initial patch position based on center
+    start_x = int(center_x - patch_width / 2)
+    start_y = int(center_y - patch_height / 2)
+
+    # Adjust if patch extends beyond right/bottom borders
+    if start_x + patch_width > img_width:
+        start_x = img_width - patch_width
+    if start_y + patch_height > img_height:
+        start_y = img_height - patch_height
+
+    # Ensure start positions are non-negative
+    start_x = max(0, start_x)
+    start_y = max(0, start_y)
+
+    return start_x, start_y
+
+
 def create_random_hpatch(
     scaled_image: Tensor, scaled_bbox: tuple[float, float, float, float]
 ) -> tuple[Tensor, tuple[int, int]]:
@@ -43,6 +75,7 @@ def create_random_hpatch(
         Tuple of (hpatch tensor, hpatch_position) where hpatch_position is (start_x, start_y)
     """
     x1_scaled, y1_scaled, x2_scaled, y2_scaled = scaled_bbox
+    img_height, img_width = scaled_image.shape[1], scaled_image.shape[2]
 
     # Calculate ball center position
     center_x_scaled = (x1_scaled + x2_scaled) / 2
@@ -54,21 +87,19 @@ def create_random_hpatch(
     # Calculate valid crop region ensuring ball center stays at least min_center_margin_pixels from patch edges
     # For x: ball center must be at least min_center_margin_pixels from left/right patch edges
     # Latest crop start: ensures center is at least min_center_margin_pixels from left patch edge
-    max_start_x = min(img_scaled_width - patch_width, int(center_x_scaled - min_center_margin_pixels))
+    max_start_x = min(img_width - patch_width, int(center_x_scaled - min_center_margin_pixels))
     # Earliest crop start: ensures center is at least min_center_margin_pixels from right patch edge
     min_start_x = max(0, int(center_x_scaled + min_center_margin_pixels - patch_width))
 
     # For y: ball center must be at least min_center_margin_pixels from top/bottom patch edges
-    max_start_y = min(img_scaled_height - patch_height, int(center_y_scaled - min_center_margin_pixels))
+    max_start_y = min(img_height - patch_height, int(center_y_scaled - min_center_margin_pixels))
     min_start_y = max(0, int(center_y_scaled + min_center_margin_pixels - patch_height))
 
-    # Ensure valid bounds
+    # Ensure valid bounds - if image is too small, use boundary-aware positioning
     if min_start_x > max_start_x:
-        min_start_x = max_start_x = max(0, min(img_scaled_width - patch_width, int(center_x_scaled - patch_width / 2)))
+        min_start_x = max_start_x = max(0, min(img_width - patch_width, int(center_x_scaled - patch_width / 2)))
     if min_start_y > max_start_y:
-        min_start_y = max_start_y = max(
-            0, min(img_scaled_height - patch_height, int(center_y_scaled - patch_height / 2))
-        )
+        min_start_y = max_start_y = max(0, min(img_height - patch_height, int(center_y_scaled - patch_height / 2)))
 
     # Random crop within valid bounds
     start_x = (
@@ -160,22 +191,15 @@ def run_ball_hyp_model(model: torch.nn.Module, scaled_yuv_image: Tensor) -> list
     patch_positions = []
     patch_idx = 0
 
-    # Collect all patches and their positions
+    # Collect all patches and their positions using boundary-aware extraction
     for i in range(n_patches_w):
         for j in range(n_patches_h):
-            # Calculate initial patch coordinates
-            start_x = i * patch_width
-            start_y = j * patch_height
+            # Calculate center position for this patch
+            center_x = i * patch_width + patch_width / 2
+            center_y = j * patch_height + patch_height / 2
 
-            # Adjust start positions to ensure patch stays within image boundaries
-            if start_x + patch_width > img_width:
-                start_x = img_width - patch_width
-            if start_y + patch_height > img_height:
-                start_y = img_height - patch_height
-
-            # Ensure start positions are non-negative
-            start_x = max(0, start_x)
-            start_y = max(0, start_y)
+            # Use boundary-aware patch bounds
+            start_x, start_y = _get_boundary_aware_patch_bounds(center_x, center_y, img_width, img_height)
 
             # Extract patch from image and add to batch
             end_x = start_x + patch_width

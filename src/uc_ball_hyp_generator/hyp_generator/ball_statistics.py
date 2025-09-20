@@ -86,12 +86,15 @@ def compute_statistics(labels: list[tuple[int, int, int, int]]) -> None:
 
 
 def main() -> None:
-    png_files: dict[str, str] = {f.name: str(f) for f in image_dir.glob("**/*.png")}
+    # Support both PNG and JPG files
+    image_files: dict[str, str] = {}
+    for pattern in ["**/*.png", "**/*.jpg", "**/*.jpeg"]:
+        image_files.update({f.name: str(f) for f in image_dir.glob(pattern)})
 
     train_img, train_labels, neg_images, skipped_trainingset = load_csv_collection(
-        trainingset_csv_collection, png_files
+        trainingset_csv_collection, image_files
     )
-    test_img, test_labels, neg_images, skipped_testset = load_csv_collection(testset_csv_collection, png_files)
+    test_img, test_labels, neg_images, skipped_testset = load_csv_collection(testset_csv_collection, image_files)
 
     all_labels = train_labels + test_labels
     compute_statistics(all_labels)

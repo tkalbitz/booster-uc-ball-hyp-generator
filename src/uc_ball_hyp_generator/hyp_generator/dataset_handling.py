@@ -13,10 +13,6 @@ from torch.utils.data import DataLoader, Dataset
 from torchvision.io import ImageReadMode, decode_image  # type: ignore[import-untyped]
 
 from uc_ball_hyp_generator.hyp_generator.config import (
-    img_scaled_height,
-    img_scaled_width,
-    patch_count_h,
-    patch_count_w,
     patch_height,
     patch_width,
     scale_factor,
@@ -29,11 +25,43 @@ from uc_ball_hyp_generator.utils.clamp import clamp
 _cache_dir = Path.home() / ".cache" / "uc_ball_hyp_generator" / "tensors"
 
 
+def _get_boundary_aware_patch_bounds(
+    center_x: float, center_y: float, img_width: int, img_height: int
+) -> tuple[int, int]:
+    """Calculate patch bounds ensuring patch stays within image boundaries.
+
+    If patch extends beyond image border, the outer edge aligns with the border
+    and start position is calculated backwards.
+
+    Args:
+        center_x: Target center x coordinate
+        center_y: Target center y coordinate
+        img_width: Image width
+        img_height: Image height
+
+    Returns:
+        Tuple of (start_x, start_y) for patch extraction
+    """
+    # Initial patch position based on center
+    start_x = int(center_x - patch_width / 2)
+    start_y = int(center_y - patch_height / 2)
+
+    # Adjust if patch extends beyond right/bottom borders
+    if start_x + patch_width > img_width:
+        start_x = img_width - patch_width
+    if start_y + patch_height > img_height:
+        start_y = img_height - patch_height
+
+    # Ensure start positions are non-negative
+    start_x = max(0, start_x)
+    start_y = max(0, start_y)
+
+    return start_x, start_y
+
+
 def _get_cache_key(image_path: str, bbox: tuple[int, int, int, int]) -> str:
     """Generate cache key from image path and processing parameters."""
-    cache_input = (
-        f"{image_path}_{img_scaled_width}_{img_scaled_height}_{scale_factor}_{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}"
-    )
+    cache_input = f"{image_path}_{scale_factor}_{bbox[0]}_{bbox[1]}_{bbox[2]}_{bbox[3]}"
     return blake3.blake3(cache_input.encode()).hexdigest()
 
 
@@ -97,19 +125,12 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         bbox = self.labels[idx]
 
         # Load and scale image with cached center point and diameter
-        image, center_x, center_y, diameter, diameter_s = self._load_and_scale_image(image_path, bbox)
+        image, center_x, center_y, diameter, diameter_s, img_width, img_height = self._load_and_scale_image(
+            image_path, bbox
+        )
 
-        # Determine which patch contains the center
-        patch_x = int(center_x // patch_width)
-        patch_y = int(center_y // patch_height)
-
-        # Clamp to valid patch indices
-        patch_x = max(0, min(patch_x, patch_count_w - 1))
-        patch_y = max(0, min(patch_y, patch_count_h - 1))
-
-        # Extract patch
-        start_x = patch_x * patch_width
-        start_y = patch_y * patch_height
+        # Get boundary-aware patch bounds
+        start_x, start_y = _get_boundary_aware_patch_bounds(center_x, center_y, img_width, img_height)
         end_x = start_x + patch_width
         end_y = start_y + patch_height
 
@@ -143,12 +164,12 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
 
     def _load_and_scale_image(
         self, image_path: str, bbox: tuple[int, int, int, int]
-    ) -> tuple[Tensor, float, float, float, float]:
-        """Load image using torchvision.io.decode_image, scale down, and return with center point and diameter."""
+    ) -> tuple[Tensor, float, float, float, float, int, int]:
+        """Load image, scale down, and return with center point, diameter, and scaled dimensions."""
         cache_key = _get_cache_key(image_path, bbox)
         cache_path = _get_cache_path(cache_key)
 
-        # Try to load from cache
+        # Try to load from cache first
         if cache_path.exists():
             try:
                 cached_data = torch.load(cache_path, weights_only=True)
@@ -158,22 +179,29 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
                     cached_data["center_y"],
                     cached_data["diameter"],
                     cached_data["diameter_s"],
+                    cached_data["scaled_width"],
+                    cached_data["scaled_height"],
                 )
             except (OSError, KeyError):
                 pass
 
-        # Load and process image
-        image_tensor = decode_image(image_path, mode=ImageReadMode.RGB)
+        # Cache miss - load and process image
+        original_image = decode_image(image_path, mode=ImageReadMode.RGB)
+        original_height, original_width = original_image.shape[1], original_image.shape[2]
+
+        # Calculate scaled dimensions
+        scaled_width = original_width // scale_factor
+        scaled_height = original_height // scale_factor
 
         # Convert from uint8 [0, 255] to float32 [0, 1] and resize
         transform = transforms_v2.Compose(
             [
                 transforms_v2.ToDtype(torch.float32, scale=True),
-                transforms_v2.Resize((img_scaled_height, img_scaled_width), antialias=True),
+                transforms_v2.Resize((scaled_height, scaled_width), antialias=True),
             ]
         )
 
-        processed_image = transform(image_tensor)
+        processed_image = transform(original_image)
 
         # Calculate scaled bbox and center point
         x1_scaled = bbox[0] / scale_factor_f
@@ -203,50 +231,37 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
                     "center_y": center_y,
                     "diameter": diameter,
                     "diameter_s": diameter_s,
+                    "scaled_width": scaled_width,
+                    "scaled_height": scaled_height,
                 },
                 cache_path,
             )
 
-        return processed_image, center_x, center_y, diameter, diameter_s
+        return processed_image, center_x, center_y, diameter, diameter_s, scaled_width, scaled_height
 
     def _get_safe_crop_bounds(
-        self, center_x: float, center_y: float, bbox: tuple[int, int, int, int]
+        self, center_x: float, center_y: float, img_width: int, img_height: int
     ) -> tuple[int, int]:
-        """Calculate safe crop bounds ensuring bbox stays inside patch with safety margin."""
-
-        # Scale bbox to downscaled coordinates
-        x1_scaled = bbox[0] / scale_factor
-        y1_scaled = bbox[1] / scale_factor
-        x2_scaled = bbox[2] / scale_factor
-        y2_scaled = bbox[3] / scale_factor
-
+        """Calculate safe crop bounds ensuring ball center stays inside patch with safety margin."""
         # Minimum distance ball center should stay from patch edges (configurable)
         min_center_margin_pixels = 1
-
-        # Calculate ball center position
-        center_x_scaled = (x1_scaled + x2_scaled) / 2
-        center_y_scaled = (y1_scaled + y2_scaled) / 2
 
         # Calculate valid crop region ensuring ball center stays at least min_center_margin_pixels from patch edges
         # For x: ball center must be at least min_center_margin_pixels from left/right patch edges
         # Latest crop start: ensures center is at least min_center_margin_pixels from left patch edge
-        max_start_x = min(img_scaled_width - patch_width, int(center_x_scaled - min_center_margin_pixels))
+        max_start_x = min(img_width - patch_width, int(center_x - min_center_margin_pixels))
         # Earliest crop start: ensures center is at least min_center_margin_pixels from right patch edge
-        min_start_x = max(0, int(center_x_scaled + min_center_margin_pixels - patch_width))
+        min_start_x = max(0, int(center_x + min_center_margin_pixels - patch_width))
 
         # For y: ball center must be at least min_center_margin_pixels from top/bottom patch edges
-        max_start_y = min(img_scaled_height - patch_height, int(center_y_scaled - min_center_margin_pixels))
-        min_start_y = max(0, int(center_y_scaled + min_center_margin_pixels - patch_height))
+        max_start_y = min(img_height - patch_height, int(center_y - min_center_margin_pixels))
+        min_start_y = max(0, int(center_y + min_center_margin_pixels - patch_height))
 
-        # Ensure valid bounds
+        # Ensure valid bounds - if image is too small, use boundary-aware positioning
         if min_start_x > max_start_x:
-            min_start_x = max_start_x = max(
-                0, min(img_scaled_width - patch_width, int(center_x_scaled - patch_width / 2))
-            )
+            min_start_x = max_start_x = max(0, min(img_width - patch_width, int(center_x - patch_width / 2)))
         if min_start_y > max_start_y:
-            min_start_y = max_start_y = max(
-                0, min(img_scaled_height - patch_height, int(center_y_scaled - patch_height / 2))
-            )
+            min_start_y = max_start_y = max(0, min(img_height - patch_height, int(center_y - patch_height / 2)))
 
         # Random crop within valid bounds
         start_x = (
@@ -268,11 +283,13 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         bbox = self.labels[idx]
 
         # Load and scale image with cached center point and diameter
-        image, center_x, center_y, diameter, diameter_s = self._load_and_scale_image(image_path, bbox)
+        image, center_x, center_y, diameter, diameter_s, img_width, img_height = self._load_and_scale_image(
+            image_path, bbox
+        )
         # image = image.to(self.device)
 
         # Get safe crop bounds
-        start_x, start_y = self._get_safe_crop_bounds(center_x, center_y, bbox)
+        start_x, start_y = self._get_safe_crop_bounds(center_x, center_y, img_width, img_height)
         end_x = start_x + patch_width
         end_y = start_y + patch_height
 

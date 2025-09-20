@@ -8,7 +8,7 @@ import torchvision.transforms.v2 as transforms_v2
 from torch import Tensor
 from torchvision.io import ImageReadMode, decode_image
 
-from uc_ball_hyp_generator.hyp_generator.config import img_scaled_height, img_scaled_width, scale_factor
+from uc_ball_hyp_generator.hyp_generator.config import scale_factor
 from uc_ball_hyp_generator.utils.logger import get_logger
 
 _logger = get_logger(__name__)
@@ -23,7 +23,7 @@ class BallHypothesisImageScaler:
 
     def _get_cache_key(self, image_path: str) -> str:
         """Generate cache key from image path and scaling parameters."""
-        cache_input = f"{image_path}_{img_scaled_width}_{img_scaled_height}_{scale_factor}"
+        cache_input = f"{image_path}_{scale_factor}"
         return blake3.blake3(cache_input.encode()).hexdigest()
 
     def _get_cache_path(self, cache_key: str) -> Path:
@@ -32,18 +32,18 @@ class BallHypothesisImageScaler:
         return subdir / f"{cache_key}.pt"
 
     def load_and_scale(self, image_path: str) -> Tensor:
-        """Load image and scale it to hypothesis generator dimensions with caching.
+        """Load image and scale it down by scale_factor with caching.
 
         Args:
             image_path: Path to the image file
 
         Returns:
-            Scaled image tensor in RGB format with shape [3, img_scaled_height, img_scaled_width]
+            Scaled image tensor in RGB format with shape [3, scaled_height, scaled_width]
         """
         cache_key = self._get_cache_key(image_path)
         cache_path = self._get_cache_path(cache_key)
 
-        # Try to load from cache
+        # Try to load from cache first
         if cache_path.exists():
             try:
                 cached_data = torch.load(cache_path, weights_only=False)
@@ -51,18 +51,23 @@ class BallHypothesisImageScaler:
             except (OSError, KeyError):
                 pass
 
-        # Load and process image
-        image_tensor = decode_image(image_path, mode=ImageReadMode.RGB)
+        # Cache miss - load and process image
+        original_image = decode_image(image_path, mode=ImageReadMode.RGB)
+        original_height, original_width = original_image.shape[1], original_image.shape[2]
+
+        # Calculate scaled dimensions
+        scaled_width = original_width // scale_factor
+        scaled_height = original_height // scale_factor
 
         # Convert from uint8 [0, 255] to float32 [0, 1] and resize
         transform = transforms_v2.Compose(
             [
                 transforms_v2.ToDtype(torch.float32, scale=True),
-                transforms_v2.Resize((img_scaled_height, img_scaled_width), antialias=True),
+                transforms_v2.Resize((scaled_height, scaled_width), antialias=True),
             ]
         )
 
-        scaled_image = transform(image_tensor)
+        scaled_image = transform(original_image)
 
         # Save to cache
         try:
