@@ -229,60 +229,75 @@ class ResizableRectItem(QGraphicsRectItem):
 
     def resize_from_handle(self, key: str, scene_pos: QPointF) -> None:
         b = self._bounds_rect
-        left = float(self.pos().x())
-        top = float(self.pos().y())
-        right = left + float(self.rect().width())
-        bottom = top + float(self.rect().height())
 
-        px = max(b.left(), min(scene_pos.x(), b.right()))
-        py = max(b.top(), min(scene_pos.y(), b.bottom()))
+        if self._shape in (Shape.CIRCLE, Shape.ELLIPSE):
+            # For circles and ellipses, maintain circumference-based behavior
+            current_rect = QRectF(self.pos(), self.rect().size())
+            current_center = current_rect.center()
 
-        if "w" in key:
-            left = min(px, right - 1.0)
-        if "e" in key:
-            right = max(px, left + 1.0)
-        if "n" in key:
-            top = min(py, bottom - 1.0)
-        if "s" in key:
-            bottom = max(py, top + 1.0)
+            # Clamp the drag position to bounds
+            px = max(b.left(), min(scene_pos.x(), b.right()))
+            py = max(b.top(), min(scene_pos.y(), b.bottom()))
+            clamped_pos = QPointF(px, py)
 
-        new_w = max(1.0, right - left)
-        new_h = max(1.0, bottom - top)
+            if self._shape == Shape.CIRCLE:
+                # For circles, calculate radius from center to drag point
+                radius = (
+                    (clamped_pos.x() - current_center.x()) ** 2 + (clamped_pos.y() - current_center.y()) ** 2
+                ) ** 0.5
+                radius = max(1.0, radius)  # Ensure minimum size
 
-        # For circles, enforce 1:1 aspect ratio during resize
-        if self._shape == Shape.CIRCLE:
-            # Use the larger dimension to ensure the circle doesn't shrink
-            size = max(new_w, new_h)
+                # Create new rectangle centered on current center
+                new_rect = QRectF(current_center.x() - radius, current_center.y() - radius, radius * 2, radius * 2)
+            else:
+                # For ellipses, adjust radii based on which handle is being dragged
+                dx = abs(clamped_pos.x() - current_center.x())
+                dy = abs(clamped_pos.y() - current_center.y())
 
-            # Adjust the rectangle based on which handle is being dragged
-            if "w" in key:  # Left side handles
-                left = right - size
-            if "e" in key:  # Right side handles
-                right = left + size
-            if "n" in key:  # Top handles
-                top = bottom - size
-            if "s" in key:  # Bottom handles
-                bottom = top + size
+                # Determine which radius to adjust based on handle direction
+                if "w" in key or "e" in key:
+                    # Horizontal handles - adjust width
+                    radius_x = max(1.0, dx)
+                    radius_y = current_rect.height() / 2
+                else:
+                    # Vertical handles - adjust height
+                    radius_x = current_rect.width() / 2
+                    radius_y = max(1.0, dy)
 
-            # Ensure we stay within bounds
-            if left < b.left():
-                left = b.left()
-                right = left + size
-            if right > b.right():
-                right = b.right()
-                left = right - size
-            if top < b.top():
-                top = b.top()
-                bottom = top + size
-            if bottom > b.bottom():
-                bottom = b.bottom()
-                top = bottom - size
+                new_rect = QRectF(
+                    current_center.x() - radius_x, current_center.y() - radius_y, radius_x * 2, radius_y * 2
+                )
+
+            # Ensure the new rectangle stays within bounds
+            new_rect = new_rect.intersected(b)
+
+            self.setPos(new_rect.topLeft())
+            self.setRect(QRectF(0.0, 0.0, new_rect.width(), new_rect.height()))
+        else:
+            # Rectangle: use traditional corner-based resize
+            left = float(self.pos().x())
+            top = float(self.pos().y())
+            right = left + float(self.rect().width())
+            bottom = top + float(self.rect().height())
+
+            px = max(b.left(), min(scene_pos.x(), b.right()))
+            py = max(b.top(), min(scene_pos.y(), b.bottom()))
+
+            if "w" in key:
+                left = min(px, right - 1.0)
+            if "e" in key:
+                right = max(px, left + 1.0)
+            if "n" in key:
+                top = min(py, bottom - 1.0)
+            if "s" in key:
+                bottom = max(py, top + 1.0)
 
             new_w = max(1.0, right - left)
             new_h = max(1.0, bottom - top)
 
-        self.setPos(QPointF(left, top))
-        self.setRect(QRectF(0.0, 0.0, new_w, new_h))
+            self.setPos(QPointF(left, top))
+            self.setRect(QRectF(0.0, 0.0, new_w, new_h))
+
         self._update_overlay_and_handles()
         if self._on_changed is not None:
             self._on_changed()
@@ -644,6 +659,49 @@ class ImageCanvas(QGraphicsView):
         """Return whether NoBall X overlay is active."""
         return self._noball_active
 
+    def _calculate_circle_from_circumference_point(
+        self, circumference_point: QPointF, current_point: QPointF
+    ) -> QRectF:
+        """Calculate bounding box for circle where circumference_point is on the circle's edge."""
+        # Calculate center as the point that makes circumference_point equidistant
+        # For simplicity, we'll use current_point as center and circumference_point to determine radius
+        center = current_point
+        radius = ((circumference_point.x() - center.x()) ** 2 + (circumference_point.y() - center.y()) ** 2) ** 0.5
+
+        # Create bounding box from center and radius
+        rect = QRectF(center.x() - radius, center.y() - radius, radius * 2, radius * 2)
+
+        # Ensure the circle stays within image bounds
+        if self._image_rect is not None:
+            rect = rect.intersected(self._image_rect)
+
+        return rect
+
+    def _calculate_ellipse_from_circumference_point(
+        self, circumference_point: QPointF, current_point: QPointF
+    ) -> QRectF:
+        """Calculate bounding box for ellipse where circumference_point is on the ellipse's edge."""
+        # For ellipses, we'll use the drag vector to determine the ellipse orientation
+        # circumference_point is on the edge, current_point helps define the ellipse
+        center_x = (circumference_point.x() + current_point.x()) / 2
+        center_y = (circumference_point.y() + current_point.y()) / 2
+
+        # Calculate radii from the center to both points
+        dx = abs(current_point.x() - center_x)
+        dy = abs(current_point.y() - center_y)
+
+        # Ensure minimum size
+        radius_x = max(dx, 1.0)
+        radius_y = max(dy, 1.0)
+
+        rect = QRectF(center_x - radius_x, center_y - radius_y, radius_x * 2, radius_y * 2)
+
+        # Ensure the ellipse stays within image bounds
+        if self._image_rect is not None:
+            rect = rect.intersected(self._image_rect)
+
+        return rect
+
     def _enforce_aspect_ratio_for_shape(self, rect: QRectF, shape: Shape) -> QRectF:
         """Enforce 1:1 aspect ratio for circles while keeping rectangle in bounds."""
         if shape != Shape.CIRCLE or self._image_rect is None:
@@ -810,13 +868,18 @@ class ImageCanvas(QGraphicsView):
             return
         if self._drag_start is not None and self._rubberband_item is not None:
             current = self.mapToScene(event.position().toPoint())
-            rect = QRectF(self._drag_start, current).normalized()
-            if self._image_rect is not None:
-                rect = rect.intersected(self._image_rect)
-
-            # Enforce aspect ratio for circles during drag
             shape = self._shape_provider()
-            rect = self._enforce_aspect_ratio_for_shape(rect, shape)
+
+            # Calculate rectangle based on shape type
+            if shape == Shape.CIRCLE:
+                rect = self._calculate_circle_from_circumference_point(self._drag_start, current)
+            elif shape == Shape.ELLIPSE:
+                rect = self._calculate_ellipse_from_circumference_point(self._drag_start, current)
+            else:
+                # Rectangle: use traditional bounding box approach
+                rect = QRectF(self._drag_start, current).normalized()
+                if self._image_rect is not None:
+                    rect = rect.intersected(self._image_rect)
 
             self._rubberband_item.setRect(rect)
             event.accept()
@@ -832,13 +895,18 @@ class ImageCanvas(QGraphicsView):
             return
         if event.button() == Qt.MouseButton.LeftButton and self._drag_start is not None:
             current = self.mapToScene(event.position().toPoint())
-            rect = QRectF(self._drag_start, current).normalized()
-            if self._image_rect is not None:
-                rect = rect.intersected(self._image_rect)
-
-            # Enforce aspect ratio for circles before creating final bbox
             shape = self._shape_provider()
-            rect = self._enforce_aspect_ratio_for_shape(rect, shape)
+
+            # Calculate final rectangle based on shape type
+            if shape == Shape.CIRCLE:
+                rect = self._calculate_circle_from_circumference_point(self._drag_start, current)
+            elif shape == Shape.ELLIPSE:
+                rect = self._calculate_ellipse_from_circumference_point(self._drag_start, current)
+            else:
+                # Rectangle: use traditional bounding box approach
+                rect = QRectF(self._drag_start, current).normalized()
+                if self._image_rect is not None:
+                    rect = rect.intersected(self._image_rect)
 
             if self._rubberband_item is not None:
                 if self._rubberband_item.scene() is self._scene:
@@ -1348,7 +1416,6 @@ class LabelingToolWindow(QMainWindow):
             self.setWindowTitle(f"{base} — {path.name} ({self._index + 1}/{len(self._image_paths)})")
         else:
             self.setWindowTitle(base)
-
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         self._save_current_image_state()
