@@ -34,7 +34,7 @@ def _default_config() -> LabelingConfig:
     """Return the built-in defaults."""
     return {
         "sam": {
-            "model_name": "sam_vit_h_4b",
+            "model_name": "sam_vit_b_01",
             "cache_dir": "~/.cache/uc_ball_hyp_generator/models/",
         },
         "cli": {

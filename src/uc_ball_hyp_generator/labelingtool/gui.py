@@ -988,7 +988,7 @@ class LabelingToolWindow(QMainWindow):
         cfg = cfg or load_config()
         self._cfg = cfg
         sam_section = cast(dict[str, object], cfg.get("sam", {}))
-        model_name = str(sam_section.get("model_name", "sam_vit_h_4b"))
+        model_name = str(sam_section.get("model_name", "sam_vit_b_01"))
         cache_dir = str(sam_section.get("cache_dir", "~/.cache/uc_ball_hyp_generator/models/"))
         self._sam_manager = SamManager(model_name=model_name, cache_dir=cache_dir)
 

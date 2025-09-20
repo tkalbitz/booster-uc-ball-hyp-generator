@@ -96,7 +96,9 @@ class SamManager:
                 progress_cb(70)
 
             # Load the SAM model
-            model_type = self._model_name.split("_")[1]  # Extract 'vit_h', 'vit_l', or 'vit_b'
+            # Extract 'vit_h', 'vit_l', or 'vit_b' from model names like 'sam_vit_h_4b'
+            parts = self._model_name.split("_")
+            model_type = f"{parts[1]}_{parts[2]}"  # Combine 'vit' and 'h'/'l'/'b'
             if model_type not in sam_model_registry:
                 msg = f"Model type {model_type} not found in registry"
                 raise ValueError(msg)
