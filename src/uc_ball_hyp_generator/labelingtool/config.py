@@ -6,8 +6,8 @@ from typing import TypedDict, cast
 
 import yaml  # type: ignore
 
-from uc_ball_hyp_generator.labelingtool.logger import get_logger
-from uc_ball_hyp_generator.labelingtool.shape import Shape
+from uc_ball_hyp_generator.labelingtool.model import Shape
+from uc_ball_hyp_generator.labelingtool.utils.logger import get_logger
 
 _logger = get_logger("uc_ball_hyp_generator.labelingtool.config")
 

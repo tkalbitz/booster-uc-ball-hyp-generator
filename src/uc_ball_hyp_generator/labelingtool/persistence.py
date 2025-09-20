@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from uc_ball_hyp_generator.labelingtool.bounding_box import BoundingBox
-from uc_ball_hyp_generator.labelingtool.logger import get_logger
+from uc_ball_hyp_generator.labelingtool.model import BoundingBox
+from uc_ball_hyp_generator.labelingtool.utils.logger import get_logger
 
 _logger = get_logger("uc_ball_hyp_generator.labelingtool.persistence")
 

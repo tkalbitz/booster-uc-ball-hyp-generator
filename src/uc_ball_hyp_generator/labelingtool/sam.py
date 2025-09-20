@@ -9,9 +9,9 @@ import numpy as np
 import torch
 from PySide6.QtCore import QObject, Signal
 
-from uc_ball_hyp_generator.labelingtool.logger import get_logger
+from uc_ball_hyp_generator.labelingtool.utils.logger import get_logger
 
-_logger = get_logger(__name__)
+_logger = get_logger("uc_ball_hyp_generator.labelingtool.sam")
 
 # SAM model URLs and filenames
 SAM_MODELS = {
