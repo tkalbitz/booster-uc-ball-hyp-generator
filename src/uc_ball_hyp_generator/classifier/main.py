@@ -234,7 +234,7 @@ def main() -> None:
             # Save model with accuracy-first filename format
             acc_first_filename = f"model.acc-{epoch + 1:03d}-{val_accuracy:.6f}-{val_loss:.6f}.pth"
             acc_first_path = output_dir / acc_first_filename
-            torch.save(classifier.state_dict(), acc_first_path)
+            torch.save(classifier.state_dict(), acc_first_path, pickle_protocol=5)
 
             _logger.info("acc: New best model saved: %.6f", best_accuracy)
 
@@ -244,7 +244,7 @@ def main() -> None:
             # Save model with loss-first filename format
             loss_first_filename = f"model.loss-{epoch + 1:03d}-{val_loss:.6f}-{val_accuracy:.6f}.pth"
             loss_first_path = output_dir / loss_first_filename
-            torch.save(classifier.state_dict(), loss_first_path)
+            torch.save(classifier.state_dict(), loss_first_path, pickle_protocol=5)
 
             _logger.info("loss: New best model saved: %.6f", best_val_loss)
 

@@ -112,7 +112,7 @@ def create_model(compile_model: bool = True) -> tuple[torch.nn.Module, str, str]
     log_dir = "./logs/" + model_name
     os.makedirs(log_dir)
 
-    torch.save(model.state_dict(), os.path.join(model_dir, "model_weights.pth"))
+    torch.save(model.state_dict(), os.path.join(model_dir, "model_weights.pth"), pickle_protocol=5)
 
     return model, model_dir, log_dir
 

@@ -235,6 +235,7 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
                     "scaled_height": scaled_height,
                 },
                 cache_path,
+                pickle_protocol=5,
             )
 
         return processed_image, center_x, center_y, diameter, diameter_s, scaled_width, scaled_height

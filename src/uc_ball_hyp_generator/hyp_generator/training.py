@@ -166,10 +166,7 @@ def save_model_checkpoints(
             f"weights.loss.{epoch + 1:03d}-{val_result.loss:.6f}-"
             f"{val_result.found_balls_coord:.6f}-{val_result.found_balls_radius:.6f}.pth"
         )
-        torch.save(
-            model.state_dict(),
-            os.path.join(model_dir, loss_filename),
-        )
+        torch.save(model.state_dict(), os.path.join(model_dir, loss_filename), pickle_protocol=5)
         delta = val_result.loss - best_val_result.loss
         _logger.info(f"Save new best model (loss): {epoch + 1:03d} {val_result.loss:.6f} {delta:.6f}")
         new_best_loss = True
@@ -181,10 +178,7 @@ def save_model_checkpoints(
             f"{val_result.found_balls_coord:.6f}-{val_result.found_balls_radius:.6f}-"
             f"{val_result.loss:.6f}.pth"
         )
-        torch.save(
-            model.state_dict(),
-            os.path.join(model_dir, most_balls_filename),
-        )
+        torch.save(model.state_dict(), os.path.join(model_dir, most_balls_filename), pickle_protocol=5)
 
         delta = val_result.found_balls_coord - best_val_result.found_balls_coord
         _logger.info(
@@ -199,10 +193,7 @@ def save_model_checkpoints(
             f"{val_result.found_balls_radius:.6f}-{val_result.found_balls_coord:.6f}-"
             f"{val_result.loss:.6f}.pth"
         )
-        torch.save(
-            model.state_dict(),
-            os.path.join(model_dir, most_balls_filename),
-        )
+        torch.save(model.state_dict(), os.path.join(model_dir, most_balls_filename), pickle_protocol=5)
 
         delta = val_result.found_balls_radius - best_val_result.found_balls_radius
         _logger.info(

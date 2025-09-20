@@ -73,7 +73,7 @@ class BallHypothesisImageScaler:
         # Save to cache
         try:
             cache_path.parent.mkdir(parents=True, exist_ok=True)
-            torch.save({"scaled_image": scaled_image}, cache_path)
+            torch.save({"scaled_image": scaled_image}, cache_path, pickle_protocol=5)
         except OSError:
             pass
 
