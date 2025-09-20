@@ -18,6 +18,9 @@ PYTHONPATH=src uv run pytest tests/ -v
 
 # Launch visualizer
 PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/visualization/launch_ball_visualizer.py /path/to/images /path/to/model.pth
+
+# Launch labeling tool (GUI)
+uv run uc-ball-label /path/to/image_or_directory
 ```
 
 **Important**: All Python commands now require `PYTHONPATH=src` and use the full package path.
@@ -38,9 +41,58 @@ PYTHONPATH=src uv run python src/uc_ball_hyp_generator/hyp_generator/visualizati
 - [Performance Benchmarks](#performance-benchmarks)
 - [Troubleshooting](#troubleshooting)
 
-## Overview
+## Labeling Tool (GUI)
 
-This project implements a convolutional neural network that:
+The repository includes a Qt-based labeling tool to annotate images and optionally use the Segment-Anything Model (SAM) to assist labeling.
+
+### How to start
+
+- From the project root (after `uv sync`):
+  - Launch with a single image or a directory:
+    - `uv run uc-ball-label /path/to/image.png`
+    - `uv run uc-ball-label /path/to/images_dir`
+
+### Command-line parameters
+
+- `uc-ball-label IMAGE_PATH [--output PATH] [--config PATH] [--stdout]`
+  - `IMAGE_PATH`: Path to an image file or a directory of images.
+  - `--output PATH`: CSV output path. If omitted, defaults to `<image_dir>/labels.csv`. Use `-` to print to stdout.
+  - `--config PATH`: Optional YAML config file. If omitted, it searches:
+    1) provided path; 2) `./config.yaml`; 3) `~/.config/uc_ball_hyp_generator/labelingtool/config.yaml`
+  - `--stdout`: Shortcut to print CSV lines to stdout (equivalent to `--output -`).
+
+### Keyboard shortcuts
+
+- Space / Right Arrow: Next image
+- Left Arrow: Previous image
+- Mouse drag: Create rectangle
+- Right Click on Box: Delete box
+- Ctrl+Z: Undo last action
+- Esc: Abort current edit
+- Enter: Accept label
+- s: Toggle SAM overlay
+- n: Toggle NoBall X
+- 1/2/3…: Switch class
+
+### Configuration
+
+Config is a YAML file with sensible defaults. Example:
+
+```yaml
+sam:
+  model_name: "sam_vit_h_4b"
+  cache_dir: "~/.cache/uc_ball_hyp_generator/models/"
+cli:
+  output: null
+  log_level: "INFO"
+shape:
+  Ball: ellipse
+  NoBall: rectangle
+```
+
+See `requirements.md` for full details.
+
+## Overview
 - Detects balls in 40×30 pixel image patches (YUV color space)
 - Predicts ball center coordinates (x, y) and confidence radius
 - Uses custom loss functions optimized for ball detection accuracy

@@ -123,7 +123,7 @@ class ResizableRectItem(QGraphicsRectItem):
         self.setRect(QRectF(0.0, 0.0, norm.width(), norm.height()))
 
         self.setZValue(10.0)
-        pen = QPen(QColor("yellow"))
+        pen = QPen(QColor("purple"))
         pen.setCosmetic(True)
         self.setPen(pen)
         self.setBrush(Qt.GlobalColor.transparent)
@@ -441,6 +441,20 @@ class ImageCanvas(QGraphicsView):
         self._noball_lines: tuple[QGraphicsLineItem, QGraphicsLineItem] | None = None
         self._sam_items: list[QGraphicsPixmapItem] = []
         self._sam_masks: list[np.ndarray] = []
+
+    def keyPressEvent(self, event) -> None:  # type: ignore[override]
+        """Handle key events in the canvas, passing navigation keys to parent."""
+        key = event.key()
+
+        # Pass navigation keys to the parent window
+        if key in (Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_Space):
+            parent = self.parent()
+            if parent is not None:
+                parent.keyPressEvent(event)
+                return
+
+        # Let the base class handle other keys
+        super().keyPressEvent(event)
 
     def has_image(self) -> bool:
         """Return whether an image is currently loaded."""
@@ -896,7 +910,7 @@ class ImageCanvas(QGraphicsView):
         if class_name == "NoBall":
             color = QColor("red")
         elif class_name == "Ball":
-            color = QColor("yellow")
+            color = QColor("red")
         else:
             hv = abs(hash(class_name)) % 360
             color = QColor.fromHsv(int(hv), 200, 255)
@@ -1334,6 +1348,7 @@ class LabelingToolWindow(QMainWindow):
             self.setWindowTitle(f"{base} — {path.name} ({self._index + 1}/{len(self._image_paths)})")
         else:
             self.setWindowTitle(base)
+
 
     def closeEvent(self, event) -> None:  # type: ignore[override]
         self._save_current_image_state()
