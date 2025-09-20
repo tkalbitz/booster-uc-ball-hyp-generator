@@ -181,17 +181,11 @@ def run_ball_hyp_model(model: torch.nn.Module, scaled_yuv_image: Tensor) -> list
     # Calculate number of patches dynamically based on image dimensions
     n_patches_w = (img_width + patch_width - 1) // patch_width
     n_patches_h = (img_height + patch_height - 1) // patch_height
-    total_patches = n_patches_w * n_patches_h
 
-    # Pre-allocate batch tensor
-    batch = torch.zeros(
-        (total_patches, 3, patch_height, patch_width), device=scaled_yuv_image.device, dtype=scaled_yuv_image.dtype
-    )
-
+    # Calculate all patch positions and bounds in vectorized manner
     patch_positions = []
-    patch_idx = 0
+    patches_list = []
 
-    # Collect all patches and their positions using boundary-aware extraction
     for i in range(n_patches_w):
         for j in range(n_patches_h):
             # Calculate center position for this patch
@@ -201,12 +195,16 @@ def run_ball_hyp_model(model: torch.nn.Module, scaled_yuv_image: Tensor) -> list
             # Use boundary-aware patch bounds
             start_x, start_y = _get_boundary_aware_patch_bounds(center_x, center_y, img_width, img_height)
 
-            # Extract patch from image and add to batch
+            # Extract patch from image
             end_x = start_x + patch_width
             end_y = start_y + patch_height
-            batch[patch_idx] = scaled_yuv_image[:, start_y:end_y, start_x:end_x]
+            patch = scaled_yuv_image[:, start_y:end_y, start_x:end_x]
+
+            patches_list.append(patch)
             patch_positions.append((start_x, start_y))
-            patch_idx += 1
+
+    # Vectorize batch creation using torch.stack for GPU efficiency
+    batch = torch.stack(patches_list, dim=0)
 
     # Run model on entire batch
     with torch.no_grad():
