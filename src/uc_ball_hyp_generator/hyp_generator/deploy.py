@@ -30,7 +30,7 @@ model.eval()
 model_file = deploy_dir + "/" + detector_name + ".pth"
 
 with open(deploy_dir + "/" + detector_name + ".txt", "w") as fp:
-    fp.write("File: {}\n\n".format(weight_file))
+    fp.write(f"File: {weight_file}\n\n")
     fp.write(str(model))
 
 shutil.copy(weight_file, model_file)

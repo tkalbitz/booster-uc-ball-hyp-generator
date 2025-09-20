@@ -3,12 +3,9 @@
 import logging
 import sys
 from pathlib import Path
-from typing import Optional
 
 
-def setup_logger(
-    name: str = __name__, level: int = logging.INFO, log_file: Optional[str | Path] = None
-) -> logging.Logger:
+def setup_logger(name: str = __name__, level: int = logging.INFO, log_file: str | Path | None = None) -> logging.Logger:
     """Set up a logger with console and optional file output.
 
     Args:

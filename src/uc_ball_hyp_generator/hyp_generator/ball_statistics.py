@@ -1,12 +1,11 @@
 import statistics
 from collections import Counter
-from typing import List, Tuple
 
 from uc_ball_hyp_generator.hyp_generator.config import image_dir, testset_csv_collection, trainingset_csv_collection
 from uc_ball_hyp_generator.utils.csv_label_reader import load_csv_collection
 
 
-def _print_histogram(data: List[int], title: str, unit: str = "pixels") -> None:
+def _print_histogram(data: list[int], title: str, unit: str = "pixels") -> None:
     """Helper function to print a histogram for given data."""
     if not data:
         return
@@ -32,16 +31,16 @@ def _print_histogram(data: List[int], title: str, unit: str = "pixels") -> None:
         print(f"{lower_bound:6.1f} - {upper_bound:6.1f} {unit}: {count}")
 
 
-def compute_statistics(labels: List[Tuple[int, int, int, int]]) -> None:
+def compute_statistics(labels: list[tuple[int, int, int, int]]) -> None:
     """Compute and print statistics for ball bounding boxes."""
     if not labels:
         print("No labels found to compute statistics.")
         return
 
-    widths: List[int] = []
-    heights: List[int] = []
-    areas: List[int] = []
-    aspect_ratios: List[float] = []
+    widths: list[int] = []
+    heights: list[int] = []
+    areas: list[int] = []
+    aspect_ratios: list[float] = []
 
     for x1, y1, x2, y2 in labels:
         width = x2 - x1

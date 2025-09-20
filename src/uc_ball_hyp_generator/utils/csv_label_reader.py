@@ -92,7 +92,7 @@ def read_csv_label(
         positive_lines: list[str] = []
     else:
         values = list(positive_result.values())
-        pos_imgs_tuple, pos_labels_tuple, pos_lines_tuple = zip(*values)
+        pos_imgs_tuple, pos_labels_tuple, pos_lines_tuple = zip(*values, strict=False)
         positive_imgs = list(pos_imgs_tuple)
         positive_labels = list(pos_labels_tuple)
         positive_lines = list(pos_lines_tuple)

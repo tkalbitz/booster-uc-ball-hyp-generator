@@ -21,7 +21,7 @@ def clean_compiled_state_dict(state_dict: dict[str, torch.Tensor]) -> dict[str, 
         Cleaned state dict without compile prefixes
     """
     # Check if this is a compiled model (has _orig_mod. prefixes)
-    if any(key.startswith("_orig_mod.") for key in state_dict.keys()):
+    if any(key.startswith("_orig_mod.") for key in state_dict):
         _logger.info("Detected compiled model, removing _orig_mod. prefixes")
         # Remove _orig_mod. prefixes from compiled model
         cleaned_state_dict = {}

@@ -52,6 +52,7 @@
 - **Dataclasses over types**: Use dataclasses instead of defining new types via `type ...` except for simple mappings like `type Unit = str`
 - **No Any**: It's forbidden to use `Any` to fix type issues - find proper type solutions
 - **Complete type coverage**: Include proper type hints throughout all code
+- **Imports on top of the file**: All imports must be on the top of the file. No importing stuff in a function.
 
 ### Code Structure & Style
 

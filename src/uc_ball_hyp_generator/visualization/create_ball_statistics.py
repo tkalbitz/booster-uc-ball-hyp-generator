@@ -138,7 +138,9 @@ def main() -> None:
 
     png_files = {f.name: str(f) for f in args.image_dir.glob("**/*.png")}
     pos_imgs, pos_labels, neg_imgs, _ = load_csv_collection(args.labels, png_files)
-    pos_bbox_map: dict[str, tuple[int, int, int, int]] = {img: bbox for img, bbox in zip(pos_imgs, pos_labels)}
+    pos_bbox_map: dict[str, tuple[int, int, int, int]] = {
+        img: bbox for img, bbox in zip(pos_imgs, pos_labels, strict=False)
+    }
 
     all_imgs = pos_imgs + neg_imgs
     all_labels = [1] * len(pos_imgs) + [0] * len(neg_imgs)
@@ -154,7 +156,7 @@ def main() -> None:
 
     # Queue of tasks (image path, label)
     task_queue: queue.Queue[tuple[str, int]] = queue.Queue()
-    for img_path, label in zip(all_imgs, all_labels):
+    for img_path, label in zip(all_imgs, all_labels, strict=False):
         task_queue.put((img_path, label))
 
     # Queue of pre‑processed tensors, limited to 128 items to bound memory usage
@@ -199,7 +201,7 @@ def main() -> None:
                     stats.add_batch(probas_tensor, labels_tensor)
 
                     if true_label == 0:
-                        for hyp, prob in zip(hyps, probs):
+                        for hyp, prob in zip(hyps, probs, strict=False):
                             if prob >= args.start_threshold:
                                 fp_records.append(f"{img_path} {hyp.center_x} {hyp.center_y} {hyp.diameter}")
 
