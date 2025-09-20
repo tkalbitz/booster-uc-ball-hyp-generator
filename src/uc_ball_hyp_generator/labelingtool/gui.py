@@ -124,9 +124,9 @@ class ResizableRectItem(QGraphicsRectItem):
         pen = QPen(QColor("yellow"))
         pen.setCosmetic(True)
         self.setPen(pen)
-        self.setBrush(Qt.BrushStyle.NoBrush)
+        self.setBrush(Qt.GlobalColor.transparent)
         self.setData(0, "bbox")
-        self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton)
+        self.setAcceptedMouseButtons(Qt.MouseButton.LeftButton | Qt.MouseButton.RightButton)
 
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
@@ -246,6 +246,39 @@ class ResizableRectItem(QGraphicsRectItem):
 
         new_w = max(1.0, right - left)
         new_h = max(1.0, bottom - top)
+
+        # For circles, enforce 1:1 aspect ratio during resize
+        if self._shape == Shape.CIRCLE:
+            # Use the larger dimension to ensure the circle doesn't shrink
+            size = max(new_w, new_h)
+
+            # Adjust the rectangle based on which handle is being dragged
+            if "w" in key:  # Left side handles
+                left = right - size
+            if "e" in key:  # Right side handles
+                right = left + size
+            if "n" in key:  # Top handles
+                top = bottom - size
+            if "s" in key:  # Bottom handles
+                bottom = top + size
+
+            # Ensure we stay within bounds
+            if left < b.left():
+                left = b.left()
+                right = left + size
+            if right > b.right():
+                right = b.right()
+                left = right - size
+            if top < b.top():
+                top = b.top()
+                bottom = top + size
+            if bottom > b.bottom():
+                bottom = b.bottom()
+                top = bottom - size
+
+            new_w = max(1.0, right - left)
+            new_h = max(1.0, bottom - top)
+
         self.setPos(QPointF(left, top))
         self.setRect(QRectF(0.0, 0.0, new_w, new_h))
         self._update_overlay_and_handles()
@@ -270,6 +303,42 @@ class ResizableRectItem(QGraphicsRectItem):
         return self._class_name
 
 
+class RubberbandItem(QGraphicsRectItem):
+    """A rubberband item that draws the appropriate shape during bounding box creation."""
+
+    def __init__(
+        self, rect: QRectF, shape: Shape, class_name: str, pen: QPen, parent: QGraphicsItem | None = None
+    ) -> None:
+        super().__init__(rect, parent)
+        self._shape = shape
+        self._class_name = class_name
+        self.setPen(pen)
+        self.setBrush(Qt.BrushStyle.NoBrush)
+        self.setZValue(10.0)
+        self.setAcceptedMouseButtons(Qt.MouseButton.NoButton)
+
+    def set_shape(self, shape: Shape) -> None:
+        self._shape = shape
+        self.update()
+
+    def set_class_name(self, class_name: str) -> None:
+        self._class_name = class_name
+        self.update()
+
+    def paint(self, painter: QPainter, option, widget: QWidget | None = None) -> None:
+        painter.setPen(self.pen())
+        rect = self.rect()
+        if self._shape == Shape.RECTANGLE:
+            painter.drawRect(rect)
+        else:
+            if self._shape == Shape.CIRCLE:
+                diameter = min(rect.width(), rect.height())
+                square = QRectF(rect.center().x() - diameter / 2, rect.center().y() - diameter / 2, diameter, diameter)
+                painter.drawEllipse(square)
+            else:  # ELLIPSE
+                painter.drawEllipse(rect)
+
+
 class HandleItem(QGraphicsRectItem):
     """Interactive handle forwarding drag events to the parent ResizableRectItem."""
 
@@ -284,7 +353,7 @@ class HandleItem(QGraphicsRectItem):
         event.accept()
 
     def mouseMoveEvent(self, event) -> None:  # type: ignore[override]
-        self._parent_rect.resize_from_handle(self._key, event.scenePosition())
+        self._parent_rect.resize_from_handle(self._key, event.scenePos())
         event.accept()
 
     def mouseReleaseEvent(self, event) -> None:  # type: ignore[override]
@@ -321,7 +390,7 @@ class ImageCanvas(QGraphicsView):
         self._last_pos: QPointF | None = None
 
         self._bbox_items: list[ResizableRectItem] = []
-        self._rubberband_item: QGraphicsRectItem | None = None
+        self._rubberband_item: RubberbandItem | None = None
         self._drag_start: QPointF | None = None
         self._image_rect: QRectF | None = None
         self._shape_provider: Callable[[], Shape] = lambda: Shape.ELLIPSE
@@ -523,6 +592,23 @@ class ImageCanvas(QGraphicsView):
         """Return whether NoBall X overlay is active."""
         return self._noball_active
 
+    def _enforce_aspect_ratio_for_shape(self, rect: QRectF, shape: Shape) -> QRectF:
+        """Enforce 1:1 aspect ratio for circles while keeping rectangle in bounds."""
+        if shape != Shape.CIRCLE or self._image_rect is None:
+            return rect
+
+        # Use the smaller dimension to create a square
+        size = min(rect.width(), rect.height())
+
+        # Center the square on the original rectangle's center
+        center = rect.center()
+        new_rect = QRectF(center.x() - size / 2, center.y() - size / 2, size, size)
+
+        # Ensure the square stays within image bounds
+        new_rect = new_rect.intersected(self._image_rect)
+
+        return new_rect
+
     def _create_bbox_from_rect(self, scene_rect: QRectF) -> None:
         if self._image_rect is None:
             return
@@ -530,6 +616,7 @@ class ImageCanvas(QGraphicsView):
         rect = rect.intersected(self._image_rect)
         if rect.width() < 1.0 or rect.height() < 1.0:
             return
+
         shape = self._shape_provider()
         class_name = self._class_provider()
         self._push_undo_snapshot()
@@ -642,13 +729,19 @@ class ImageCanvas(QGraphicsView):
                 super().mousePressEvent(event)
                 return
             self._drag_start = self.mapToScene(event.position().toPoint())
-            pen = QPen(QColor("yellow"))
-            pen.setCosmetic(True)
+            shape = self._shape_provider()
+            class_name = self._class_provider()
+            pen = self._pen_for_class(class_name)
             pen.setStyle(Qt.PenStyle.DashLine)
             if self._rubberband_item is None:
-                self._rubberband_item = self._scene.addRect(QRectF(self._drag_start, self._drag_start), pen)
+                self._rubberband_item = RubberbandItem(
+                    QRectF(self._drag_start, self._drag_start), shape, class_name, pen
+                )
+                self._scene.addItem(self._rubberband_item)
             else:
                 self._rubberband_item.setPen(pen)
+                self._rubberband_item.set_shape(shape)
+                self._rubberband_item.set_class_name(class_name)
                 self._rubberband_item.setRect(QRectF(self._drag_start, self._drag_start))
             event.accept()
             return
@@ -668,6 +761,11 @@ class ImageCanvas(QGraphicsView):
             rect = QRectF(self._drag_start, current).normalized()
             if self._image_rect is not None:
                 rect = rect.intersected(self._image_rect)
+
+            # Enforce aspect ratio for circles during drag
+            shape = self._shape_provider()
+            rect = self._enforce_aspect_ratio_for_shape(rect, shape)
+
             self._rubberband_item.setRect(rect)
             event.accept()
             return
@@ -685,6 +783,11 @@ class ImageCanvas(QGraphicsView):
             rect = QRectF(self._drag_start, current).normalized()
             if self._image_rect is not None:
                 rect = rect.intersected(self._image_rect)
+
+            # Enforce aspect ratio for circles before creating final bbox
+            shape = self._shape_provider()
+            rect = self._enforce_aspect_ratio_for_shape(rect, shape)
+
             if self._rubberband_item is not None:
                 if self._rubberband_item.scene() is self._scene:
                     self._scene.removeItem(self._rubberband_item)
@@ -768,6 +871,21 @@ class ImageCanvas(QGraphicsView):
             return (0, 0)
         return (int(self._image_rect.width()), int(self._image_rect.height()))
 
+    def delete_selected_bboxes(self) -> bool:
+        """Delete currently selected bounding boxes and return True if any were deleted."""
+        selected_items = self.scene().selectedItems()
+        bbox_items_to_delete = [item for item in selected_items if isinstance(item, ResizableRectItem)]
+        if not bbox_items_to_delete:
+            return False
+
+        self._push_undo_snapshot()
+        for item in bbox_items_to_delete:
+            if item in self._bbox_items:
+                self._bbox_items.remove(item)
+            if item.scene() is self._scene:
+                self._scene.removeItem(item)
+        return True
+
     def _create_bbox_from_mask_point(self, x: int, y: int) -> None:
         if not self._sam_masks:
             return
@@ -795,6 +913,7 @@ class LabelingToolWindow(QMainWindow):
     def __init__(self, cfg: dict[str, object] | None = None) -> None:
         super().__init__()
         self.setWindowTitle("Labeling Tool")
+        self.setMinimumSize(1024, 768)
         self._image_paths: list[Path] = []
         self._index: int = -1
         self._single_action_mode: bool = False
@@ -928,6 +1047,11 @@ class LabelingToolWindow(QMainWindow):
 
         if key == Qt.Key.Key_N:
             self._toggle_noball_mode()
+            return
+
+        if key == Qt.Key.Key_Delete:
+            if self._view.delete_selected_bboxes():
+                self._status.showMessage("Deleted selected bounding box", 1500)
             return
 
         if Qt.Key.Key_1 <= key <= Qt.Key.Key_9:

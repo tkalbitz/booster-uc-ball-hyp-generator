@@ -44,3 +44,7 @@ def main() -> int:
         return 2
     win.show()
     return app.exec()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

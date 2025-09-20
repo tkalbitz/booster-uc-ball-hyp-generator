@@ -43,7 +43,7 @@ def _default_config() -> LabelingConfig:
         },
         "shape": {
             # Default shape per class
-            "Ball": "ellipse",
+            "Ball": "circle",
             "NoBall": "rectangle",
         },
     }
