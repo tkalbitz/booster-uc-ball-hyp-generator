@@ -1249,7 +1249,7 @@ class LabelingToolWindow(QMainWindow):
             self._status.showMessage("Invalid image size for SAM", 1500)
             return
         self._sam_thread = QThread(self)
-        self._sam_worker = SamWorker(self._current_path, width, height, self._sam_manager)
+        self._sam_worker = SamWorker(self._current_path, self._sam_manager)
         self._sam_worker.moveToThread(self._sam_thread)
         self._sam_thread.started.connect(self._sam_worker.run)  # type: ignore[arg-type]
         self._sam_worker.progress.connect(self._on_sam_progress)  # type: ignore[arg-type]
