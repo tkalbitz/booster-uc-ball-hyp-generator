@@ -76,7 +76,7 @@ def train_epoch(
     # Create progress bar for training batches
     progress_bar = tqdm(enumerate(dataloader), total=len(dataloader), desc="Training")
 
-    for batch_idx, (patches, labels) in progress_bar:
+    for _batch_idx, (patches, labels) in progress_bar:
         patches = patches.to(device)
         labels = labels.to(device)
 

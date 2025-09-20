@@ -28,7 +28,7 @@ class BinaryClassifierStatistics:
 
     def __init__(self, thresholds: list[float] | np.ndarray):
         """Initialize the evaluator with a set of thresholds."""
-        if not isinstance(thresholds, (list, np.ndarray)) or len(thresholds) == 0:
+        if not isinstance(thresholds, list | np.ndarray) or len(thresholds) == 0:
             msg = "Thresholds must be a non-empty list or numpy array."
             raise ValueError(msg)
         self.thresholds: np.ndarray = np.array(thresholds)

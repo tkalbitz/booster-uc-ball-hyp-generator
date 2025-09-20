@@ -17,10 +17,7 @@ def _print_histogram(data: list[int], title: str, unit: str = "pixels") -> None:
 
     bins = [0] * num_bins
     for value in data:
-        if bin_width > 0:
-            bin_index = min(int((value - min_val) / bin_width), num_bins - 1)
-        else:
-            bin_index = 0
+        bin_index = min(int((value - min_val) / bin_width), num_bins - 1) if bin_width > 0 else 0
         bins[bin_index] += 1
 
     print(f"\n{title} Histogram:")

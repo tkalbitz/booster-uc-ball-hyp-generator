@@ -28,6 +28,9 @@ dependencies = [
 
 ]
 
+[project.scripts]
+uc-ball-label = "uc_ball_hyp_generator.labelingtool.cli:main"
+
 [dependency-groups]
 dev = [
     "mypy>=1.17.1",

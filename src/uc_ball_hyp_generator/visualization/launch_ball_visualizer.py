@@ -39,7 +39,7 @@ def main() -> None:
         print(f"Error: Model file does not exist: {hyp_model_path}")
         sys.exit(1)
 
-    if not hyp_model_file.suffix.lower() == ".pth":
+    if hyp_model_file.suffix.lower() != ".pth":
         print(f"Error: Model file must have .pth extension: {hyp_model_path}")
         sys.exit(1)
 
@@ -51,7 +51,7 @@ def main() -> None:
         if not classifier_file.exists():
             print(f"Error: Classifier weights file does not exist: {classifier_weights_path}")
             sys.exit(1)
-        if not classifier_file.suffix.lower() == ".pth":
+        if classifier_file.suffix.lower() != ".pth":
             print(f"Error: Classifier weights file must have .pth extension: {classifier_weights_path}")
             sys.exit(1)
         # Set classifier weights path in the adapter module

@@ -14,7 +14,10 @@ print(f"Using device: {device}")
 
 deploy_dir: str = "/home/tkalbitz/naoTeamRepo/firmware_5.0/deploy/data/tflite/"
 detector_name: str = "uc-ball-hyp-generator"
-weight_file: str = "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/yuv_2021-05-22-08-48-01/weights.balls.264-0.954385-1.292296.pth"
+weight_file: str = (
+    "/home/tkalbitz/PycharmProjects/uc-ball-hyp-generator/model/"
+    "yuv_2021-05-22-08-48-01/weights.balls.264-0.954385-1.292296.pth"
+)
 
 if len(sys.argv) == 2:
     weight_file = sys.argv[1]

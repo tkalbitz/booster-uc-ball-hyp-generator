@@ -186,11 +186,16 @@ def get_adapter_info() -> dict[str, str]:
     return {
         "name": "UC Ball Detection (Patch-based)",
         "version": "1.0.0",
-        "description": "Ball detection using trained PyTorch model with patch-based processing for UC ball hypothesis generation",
+        "description": (
+            "Ball detection using trained PyTorch model with patch-based processing for UC ball hypothesis generation"
+        ),
         "supported_formats": "JPEG, PNG, and other PIL-supported formats",
         "model_type": "NetworkV2 (Custom CNN)",
         "classes": "ball",
         "requirements": "torch>=2.8.0, PIL, numpy",
         "environment": "Set BALL_MODEL_PATH to point to the .pth model file",
-        "patch_info": f"Processes images as {img_scaled_width // patch_width}x{img_scaled_height // patch_height} grid of {patch_width}x{patch_height} patches",
+        "patch_info": (
+            f"Processes images as {img_scaled_width // patch_width}x"
+            f"{img_scaled_height // patch_height} grid of {patch_width}x{patch_height} patches"
+        ),
     }

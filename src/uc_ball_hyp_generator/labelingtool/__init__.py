@@ -10,17 +10,17 @@ Public API:
 - load_config: Load YAML config merged with sensible defaults.
 - get_shape_for_class: Resolve the configured shape for a class name.
 - label_image: High-level API entry (stub for now).
-- save_labels: CSV persistence function (stub for now).
+- save_labels: CSV persistence (write).
 """
 
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Sequence
 
 from uc_ball_hyp_generator.labelingtool.model import BoundingBox, Shape
 from uc_ball_hyp_generator.labelingtool.config import load_config, get_shape_for_class
 from uc_ball_hyp_generator.labelingtool.utils.logger import get_logger
+from uc_ball_hyp_generator.labelingtool.persistence import save_labels, load_existing_labels
 
 __all__ = [
     "BoundingBox",
@@ -29,6 +29,7 @@ __all__ = [
     "get_shape_for_class",
     "label_image",
     "save_labels",
+    "load_existing_labels",
     "_logger",
 ]
 
@@ -55,21 +56,3 @@ def label_image(image_path: str | Path, *, config: dict[str, object] | None = No
         NotImplementedError: Always, until later milestones implement the UI workflow.
     """
     raise NotImplementedError("label_image() is not implemented yet (planned in later milestones).")
-
-
-def save_labels(csv_path: str | Path, entries: Sequence[BoundingBox]) -> None:
-    """
-    Save labeling results to a semicolon-separated CSV file in the specified format.
-
-    Note:
-        This is a placeholder stub for Milestones 1 & 2. CSV persistence, sorting,
-        and stdout support will be implemented in a later milestone.
-
-    Args:
-        csv_path: Output CSV path.
-        entries: Iterable of BoundingBox entries to persist.
-
-    Raises:
-        NotImplementedError: Always, until later milestones implement persistence.
-    """
-    raise NotImplementedError("save_labels() is not implemented yet (planned in later milestones).")

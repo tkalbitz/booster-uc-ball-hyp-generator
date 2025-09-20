@@ -192,7 +192,9 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         diameter_s = max(1.0, min(bbox[2] - bbox[0], bbox[3] - bbox[1])) / scale_factor_f
 
         # Save to cache
-        try:
+        from contextlib import suppress
+
+        with suppress(OSError):
             torch.save(
                 {
                     "image_tensor": processed_image,
@@ -204,8 +206,6 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
                 },
                 cache_path,
             )
-        except OSError:
-            pass
 
         return processed_image, center_x, center_y, diameter, diameter_s
 
@@ -420,7 +420,8 @@ RGB → YUV444 use GPU optimized conversion from Kornia (kornia.color.rgb_to_yuv
 
 5. OUTPUTS
 - Patch tensor: [C,H,W] in YUV444 format
-- Point tensor: [x_scaled, y_scaled, diameter] where x_scaled, y_scaled are in [-1,1] range from scale_x/scale_y functions
+- Point tensor: [x_scaled, y_scaled, diameter] where x_scaled, y_scaled are in [-1,1] 
+  range from scale_x/scale_y functions
 
 6. INTERFACE REQUIREMENTS
 - Inherit from torch.utils.data.Dataset
@@ -487,7 +488,8 @@ Cache Management:
 - Lazy directory creation (created when first cache access needed)
 - Cache validation: existence check sufficient (no timestamp validation)
 - Error handling: on cache load failure, recompute and save to cache
-- Method signature: _load_and_scale_image(image_path: str, bbox: tuple[int,int,int,int]) -> tuple[Tensor, float, float, float]
+- Method signature: _load_and_scale_image(image_path: str, bbox: tuple[int,int,int,int]) 
+  -> tuple[Tensor, float, float, float]
 
 Performance Benefits:
 - Eliminates repeated image decoding and scaling operations

@@ -162,7 +162,10 @@ def save_model_checkpoints(
     new_best_balls_radius = False
 
     if val_result.loss < best_val_result.loss:
-        loss_filename = f"weights.loss.{epoch + 1:03d}-{val_result.loss:.6f}-{val_result.found_balls_coord:.6f}-{val_result.found_balls_radius:.6f}.pth"
+        loss_filename = (
+            f"weights.loss.{epoch + 1:03d}-{val_result.loss:.6f}-"
+            f"{val_result.found_balls_coord:.6f}-{val_result.found_balls_radius:.6f}.pth"
+        )
         torch.save(
             model.state_dict(),
             os.path.join(model_dir, loss_filename),
@@ -173,7 +176,11 @@ def save_model_checkpoints(
         best_val_result.loss = val_result.loss
 
     if val_result.found_balls_coord > best_val_result.found_balls_coord:
-        most_balls_filename = f"weights.balls.coord.{epoch + 1:03d}-{val_result.found_balls_coord:.6f}-{val_result.found_balls_radius:.6f}-{val_result.loss:.6f}.pth"
+        most_balls_filename = (
+            f"weights.balls.coord.{epoch + 1:03d}-"
+            f"{val_result.found_balls_coord:.6f}-{val_result.found_balls_radius:.6f}-"
+            f"{val_result.loss:.6f}.pth"
+        )
         torch.save(
             model.state_dict(),
             os.path.join(model_dir, most_balls_filename),
@@ -187,7 +194,11 @@ def save_model_checkpoints(
         new_best_balls_coord = True
 
     if val_result.found_balls_radius > best_val_result.found_balls_radius:
-        most_balls_filename = f"weights.balls.radius.{epoch + 1:03d}-{val_result.found_balls_radius:.6f}-{val_result.found_balls_coord:.6f}-{val_result.loss:.6f}.pth"
+        most_balls_filename = (
+            f"weights.balls.radius.{epoch + 1:03d}-"
+            f"{val_result.found_balls_radius:.6f}-{val_result.found_balls_coord:.6f}-"
+            f"{val_result.loss:.6f}.pth"
+        )
         torch.save(
             model.state_dict(),
             os.path.join(model_dir, most_balls_filename),
