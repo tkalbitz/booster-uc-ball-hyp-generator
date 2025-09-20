@@ -45,24 +45,21 @@ def main() -> None:
     model.to(memory_format=torch.channels_last)
 
     # 3. Create a dummy input
-    dummy_input = torch.randn(1, 3, patch_height, patch_width).to(memory_format=torch.channels_last)
+    batch_size = 16
+    dummy_input = torch.randn(batch_size, 3, patch_height, patch_width).to(memory_format=torch.channels_last)
 
-    # 4. ✅ SIMPLIFIED EXPORT: Use the unified torch.onnx.export with the dynamo backend.
-    print(f"Exporting model with Dynamo backend to ONNX at: {args.output}")
+    # 4. ✅ FINAL FIX: Revert to the stable legacy ONNX exporter.
+    print(f"Exporting model with legacy tracer to ONNX at: {args.output}")
     torch.onnx.export(
         model,
-        (dummy_input,),
+        dummy_input,
         str(args.output),
         input_names=["input"],
         output_names=["output"],
-        opset_version=11,
+        opset_version=17,
         do_constant_folding=True,
-        # The 'dynamic_axes' format is used by this unified API
-        dynamic_axes={
-            "input": {0: "N"},
-            "output": {0: "N"},
-        },
-        dynamo=True,  # This flag activates the torch.export backend
+        dynamo=False,
+        report=True,
     )
 
     print("✅ Export complete.")

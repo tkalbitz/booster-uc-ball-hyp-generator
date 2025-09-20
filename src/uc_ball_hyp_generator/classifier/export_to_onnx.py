@@ -14,7 +14,6 @@ import argparse
 from pathlib import Path
 
 import torch
-import torch.export
 import torch.onnx
 
 from uc_ball_hyp_generator.classifier.config import CPATCH_SIZE
@@ -41,29 +40,27 @@ def main() -> None:
     model.load_state_dict(clean_compiled_state_dict(state_dict))
     model.eval()
 
-    # 2. 🧠 OPTIMIZATION: Convert to channels_last for NHWC format
+    # 2. Convert to channels_last for NHWC format
     print("Converting model to channels_last (NHWC) memory format...")
     model.to(memory_format=torch.channels_last)
 
-    # 3. 🧠 OPTIMIZATION: Compile the model to fuse operations before export
-    print("Compiling model with torch.compile() for pre-export optimizations...")
-    compiled_model = torch.compile(model, mode="reduce-overhead", fullgraph=True)
-
-    # 4. Create a dummy input and define dynamic shape for the batch dimension
-    batch_dim = torch.export.Dim("N", min=1)
+    # 3. Create a dummy input
     dummy_input = torch.randn(1, 3, CPATCH_SIZE, CPATCH_SIZE).to(memory_format=torch.channels_last)
-    dynamic_shapes = {"input": {0: batch_dim}}
 
-    # 5. 🧠 OPTIMIZATION: Export using the modern torch.export API
-    print("Exporting model graph using torch.export.export()...")
-    exported_program = torch.export.export(compiled_model, (dummy_input,), dynamic_shapes=dynamic_shapes)
-
-    # 6. Save the captured graph to an ONNX file
-    print(f"Saving exported program to ONNX at: {args.output}")
-    torch.onnx.save(
-        exported_program,
-        args.output,
-        opset_version=11,
+    # 4. ✅ FINAL FIX: Revert to the stable legacy ONNX exporter.
+    print(f"Exporting model with legacy tracer to ONNX at: {args.output}")
+    torch.onnx.export(
+        model,
+        dummy_input,
+        str(args.output),
+        input_names=["input"],
+        output_names=["output"],
+        opset_version=17,
+        do_constant_folding=True,
+        dynamic_axes={
+            "input": {0: "N"},
+            "output": {0: "N"},
+        },
     )
 
     print("✅ Export complete.")
