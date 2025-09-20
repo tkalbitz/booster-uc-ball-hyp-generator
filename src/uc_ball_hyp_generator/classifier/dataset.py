@@ -16,6 +16,9 @@ from uc_ball_hyp_generator.classifier.config import CLASSIFIER_DILATION_FACTOR, 
 from uc_ball_hyp_generator.hyp_generator.ball_hypothesis_image_scaler import BallHypothesisImageScaler
 from uc_ball_hyp_generator.hyp_generator.config import scale_factor
 from uc_ball_hyp_generator.hyp_generator.utils import create_random_hpatch, transform_hyp_output_to_original_coords
+from uc_ball_hyp_generator.utils.logger import get_logger
+
+_logger = get_logger(__name__)
 
 
 class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
@@ -145,15 +148,21 @@ class BallClassifierDataset(Dataset[tuple[Tensor, Tensor]]):
         """Load image and return both original and scaled versions."""
         # Check if we should use cached JPEG for PNG files
         if image_path.lower().endswith(".png"):
-            jpg_path = self._get_jpg_cache_path(image_path)
-            if jpg_path.exists():
+            img_cache_path = self._get_jpg_cache_path(image_path)
+            if img_cache_path.exists():
                 # Load from JPEG cache
-                original_image = decode_image(str(jpg_path), mode=ImageReadMode.RGB)
+                try:
+                    original_image = decode_image(str(img_cache_path), mode=ImageReadMode.RGB)
+                except RuntimeError:
+                    # If JPEG cache is corrupted, delete it and reload
+                    _logger.warning("JPEG cache for %s is corrupted. Recreate!", image_path)
+                    img_cache_path.unlink()
+                    return self._load_and_scale_image(image_path)
             else:
-                # Load PNG, convert to JPEG and cache
+                # Load image, convert to JPEG and cache
                 original_image = decode_image(image_path, mode=ImageReadMode.RGB)
-                jpg_path.parent.mkdir(parents=True, exist_ok=True)
-                write_jpeg(original_image, str(jpg_path), quality=95)
+                img_cache_path.parent.mkdir(parents=True, exist_ok=True)
+                write_jpeg(original_image, str(img_cache_path), quality=95)
         else:
             # Load original image directly
             original_image = decode_image(image_path, mode=ImageReadMode.RGB)

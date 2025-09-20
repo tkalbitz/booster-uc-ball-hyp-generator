@@ -48,7 +48,8 @@ class BallHypothesisImageScaler:
             try:
                 cached_data = torch.load(cache_path, weights_only=False)
                 return cached_data["scaled_image"]
-            except (OSError, KeyError):
+            except (OSError, KeyError, RuntimeError):
+                _logger.warning("Failed to load scaled image from cache for %s", image_path)
                 pass
 
         # Cache miss - load and process image
