@@ -208,12 +208,7 @@ def run_ball_hyp_model(model: torch.nn.Module, scaled_yuv_image: Tensor) -> list
 
     # Run model on entire batch
     with torch.no_grad():
-        if batch.is_cuda:
-            amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-            with torch.autocast(device_type="cuda", dtype=amp_dtype):
-                outputs = model(batch.to(memory_format=torch.channels_last))
-        else:
-            outputs = model(batch)
+        outputs = model(batch)
 
     # Process all outputs
     hypotheses = []

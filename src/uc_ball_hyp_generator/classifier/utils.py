@@ -85,12 +85,7 @@ def run_ball_classifier_model(
 
     # Run model on batch
     with torch.no_grad():
-        if batch.is_cuda:
-            amp_dtype = torch.bfloat16 if torch.cuda.is_bf16_supported() else torch.float16
-            with torch.autocast(device_type="cuda", dtype=amp_dtype):
-                outputs: Tensor = model(batch.to(memory_format=torch.channels_last))
-        else:
-            outputs: Tensor = model(batch)
+        outputs: Tensor = model(batch)
 
     # Apply sigmoid to get probabilities
     probabilities = outputs.squeeze(1).cpu().tolist()

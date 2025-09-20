@@ -27,8 +27,6 @@ from uc_ball_hyp_generator.utils.flops import get_flops
 from uc_ball_hyp_generator.utils.logger import get_logger
 
 _logger = get_logger(__name__)
-# AMP GradScaler shared across epochs for classifier (float16 only)
-_CLS_SCALER: torch.cuda.amp.GradScaler | None = None
 
 
 def create_datasets(hyp_model: torch.nn.Module) -> tuple[BallClassifierDataset, BallClassifierDataset]:
@@ -79,44 +77,18 @@ def train_epoch(
     progress_bar = tqdm(enumerate(dataloader), total=len(dataloader), desc="Training")
 
     for _batch_idx, (patches, labels) in progress_bar:
-        if device.type == "cuda":
-            patches = patches.to(device, non_blocking=True).to(memory_format=torch.channels_last)
-            labels = labels.to(device, non_blocking=True)
-        else:
-            patches = patches.to(device)
-            labels = labels.to(device)
+        patches = patches.to(device)
+        labels = labels.to(device)
 
-        optimizer.zero_grad(set_to_none=True)
+        optimizer.zero_grad()
 
-        # Mixed precision forward/backward on CUDA
-        amp_dtype = (
-            torch.bfloat16
-            if (device.type == "cuda" and torch.cuda.is_bf16_supported())
-            else (torch.float16 if device.type == "cuda" else None)
-        )
+        # Forward pass
+        outputs = model(patches)
+        loss = criterion(outputs, labels)
 
-        if amp_dtype is None:
-            outputs = model(patches)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-        else:
-            if amp_dtype is torch.float16:
-                global _CLS_SCALER
-                if _CLS_SCALER is None:
-                    _CLS_SCALER = torch.cuda.amp.GradScaler()
-                with torch.autocast(device_type="cuda", dtype=amp_dtype):
-                    outputs = model(patches)
-                    loss = criterion(outputs, labels)
-                _CLS_SCALER.scale(loss).backward()
-                _CLS_SCALER.step(optimizer)
-                _CLS_SCALER.update()
-            else:
-                with torch.autocast(device_type="cuda", dtype=amp_dtype):
-                    outputs = model(patches)
-                    loss = criterion(outputs, labels)
-                loss.backward()
-                optimizer.step()
+        # Backward pass
+        loss.backward()
+        optimizer.step()
 
         total_loss += loss.item()
         num_batches += 1
@@ -144,25 +116,11 @@ def validate(
 
     with torch.no_grad():
         for patches, labels in progress_bar:
-            if device.type == "cuda":
-                patches = patches.to(device, non_blocking=True).to(memory_format=torch.channels_last)
-                labels = labels.to(device, non_blocking=True)
-            else:
-                patches = patches.to(device)
-                labels = labels.to(device)
+            patches = patches.to(device)
+            labels = labels.to(device)
 
-            amp_dtype = (
-                torch.bfloat16
-                if (device.type == "cuda" and torch.cuda.is_bf16_supported())
-                else (torch.float16 if device.type == "cuda" else None)
-            )
-            if amp_dtype is None:
-                outputs = model(patches)
-                loss = criterion(outputs, labels)
-            else:
-                with torch.autocast(device_type="cuda", dtype=amp_dtype):
-                    outputs = model(patches)
-                    loss = criterion(outputs, labels)
+            outputs = model(patches)
+            loss = criterion(outputs, labels)
 
             total_loss += loss.item()
 
@@ -198,10 +156,8 @@ def main() -> None:
     args = parser.parse_args()
 
     # Setup device
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    if device.type == "cuda":
-        torch.set_float32_matmul_precision("high")
-        torch.backends.cudnn.benchmark = True
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    device = torch.device("cpu")
     _logger.info("Using device: %s", device)
 
     # Load hypothesis model
@@ -231,9 +187,9 @@ def main() -> None:
         prefetch_factor=4,
     )
 
-    classifier = BallClassifierHypercolumn().to(device, memory_format=torch.channels_last)
+    classifier = BallClassifierHypercolumn().to("cpu")
     _logger.info(summary(classifier, input_size=(1, 3, CPATCH_SIZE, CPATCH_SIZE)))
-    classifier = BallClassifierHypercolumn().to(device, memory_format=torch.channels_last)
+    classifier = BallClassifierHypercolumn().to(torch.device("cpu"))
     try:
         flops = get_flops(classifier, (3, CPATCH_SIZE, CPATCH_SIZE))
         _logger.info("Model has %.2f MFlops", flops / 1e6)
@@ -241,7 +197,7 @@ def main() -> None:
         _logger.warning("Could not calculate FLOPs: %s", e)
 
     # Create classifier model
-    classifier: torch.nn.Module = get_ball_classifier_model().to(device, memory_format=torch.channels_last)
+    classifier: torch.nn.Module = get_ball_classifier_model().to(device)
 
     # Setup training components
     optimizer = AdamW(classifier.parameters(), lr=args.learning_rate, weight_decay=1e-4)
