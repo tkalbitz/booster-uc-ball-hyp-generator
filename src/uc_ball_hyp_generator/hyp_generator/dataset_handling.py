@@ -18,45 +18,12 @@ from uc_ball_hyp_generator.hyp_generator.config import (
     scale_factor,
     scale_factor_f,
 )
+from uc_ball_hyp_generator.hyp_generator.patch_bounds import get_boundary_aware_patch_bounds
 from uc_ball_hyp_generator.hyp_generator.scale_patch import scale_patch_x, scale_patch_y, scale_radius
 from uc_ball_hyp_generator.utils.clamp import clamp
 
 # Cache directory for preprocessed tensors
 _cache_dir = Path.home() / ".cache" / "uc_ball_hyp_generator" / "tensors"
-
-
-def _get_boundary_aware_patch_bounds(
-    center_x: float, center_y: float, img_width: int, img_height: int
-) -> tuple[int, int]:
-    """Calculate patch bounds ensuring patch stays within image boundaries.
-
-    If patch extends beyond image border, the outer edge aligns with the border
-    and start position is calculated backwards.
-
-    Args:
-        center_x: Target center x coordinate
-        center_y: Target center y coordinate
-        img_width: Image width
-        img_height: Image height
-
-    Returns:
-        Tuple of (start_x, start_y) for patch extraction
-    """
-    # Initial patch position based on center
-    start_x = int(center_x - patch_width / 2)
-    start_y = int(center_y - patch_height / 2)
-
-    # Adjust if patch extends beyond right/bottom borders
-    if start_x + patch_width > img_width:
-        start_x = img_width - patch_width
-    if start_y + patch_height > img_height:
-        start_y = img_height - patch_height
-
-    # Ensure start positions are non-negative
-    start_x = max(0, start_x)
-    start_y = max(0, start_y)
-
-    return start_x, start_y
 
 
 def _get_cache_key(image_path: str, bbox: tuple[int, int, int, int]) -> str:
@@ -130,7 +97,7 @@ class BallDataset(Dataset[tuple[Tensor, Tensor]]):
         )
 
         # Get boundary-aware patch bounds
-        start_x, start_y = _get_boundary_aware_patch_bounds(center_x, center_y, img_width, img_height)
+        start_x, start_y = get_boundary_aware_patch_bounds(center_x, center_y, img_width, img_height)
         end_x = start_x + patch_width
         end_y = start_y + patch_height
 

@@ -12,6 +12,7 @@ from uc_ball_hyp_generator.hyp_generator.config import (
     scale_factor,
 )
 from uc_ball_hyp_generator.hyp_generator.model import get_ball_hyp_model
+from uc_ball_hyp_generator.hyp_generator.patch_bounds import get_boundary_aware_patch_bounds
 from uc_ball_hyp_generator.hyp_generator.scale_patch import unscale_patch_x, unscale_patch_y, unscale_radius
 from uc_ball_hyp_generator.utils.common_model_operations import load_model_with_clean_state_dict
 from uc_ball_hyp_generator.utils.logger import get_logger
@@ -26,40 +27,6 @@ class BallHypothesis:
     center_x: float
     center_y: float
     diameter: float
-
-
-def _get_boundary_aware_patch_bounds(
-    center_x: float, center_y: float, img_width: int, img_height: int
-) -> tuple[int, int]:
-    """Calculate patch bounds ensuring patch stays within image boundaries.
-
-    If patch extends beyond image border, the outer edge aligns with the border
-    and start position is calculated backwards.
-
-    Args:
-        center_x: Target center x coordinate
-        center_y: Target center y coordinate
-        img_width: Image width
-        img_height: Image height
-
-    Returns:
-        Tuple of (start_x, start_y) for patch extraction
-    """
-    # Initial patch position based on center
-    start_x = int(center_x - patch_width / 2)
-    start_y = int(center_y - patch_height / 2)
-
-    # Adjust if patch extends beyond right/bottom borders
-    if start_x + patch_width > img_width:
-        start_x = img_width - patch_width
-    if start_y + patch_height > img_height:
-        start_y = img_height - patch_height
-
-    # Ensure start positions are non-negative
-    start_x = max(0, start_x)
-    start_y = max(0, start_y)
-
-    return start_x, start_y
 
 
 def create_random_hpatch(
@@ -193,7 +160,7 @@ def run_ball_hyp_model(model: torch.nn.Module, scaled_yuv_image: Tensor) -> list
             center_y = j * patch_height + patch_height / 2
 
             # Use boundary-aware patch bounds
-            start_x, start_y = _get_boundary_aware_patch_bounds(center_x, center_y, img_width, img_height)
+            start_x, start_y = get_boundary_aware_patch_bounds(center_x, center_y, img_width, img_height)
 
             # Extract patch from image
             end_x = start_x + patch_width
